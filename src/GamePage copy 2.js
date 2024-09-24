@@ -18,14 +18,7 @@ import {
   Chip,
   CircularProgress,
   Stack,
-  IconButton,
-  Modal,
-  ModalDialog,
-  ModalClose,
-  List,
-  ListItem,
-  ListItemContent,
-  CardContent
+  IconButton
 } from '@mui/joy';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { base } from 'viem/chains';
@@ -38,7 +31,6 @@ import Drawer from './Drawer';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import DraggableProfileCards from './DraggableProfileCards';
-import { useParams, Link} from 'react-router-dom';
 
 const ElectionRoom = ({ roomNumber, participants, contributions, rankings, members }) => {
   const [expanded, setExpanded] = useState(false);
@@ -138,108 +130,6 @@ const PreviousElectionCard = ({ electionData, members }) => {
   );
 };
 
-const UserProfileModal = ({ open, onClose, userAddress, communityData }) => {
-  const userProfile = communityData?.members?.find(
-    member => member.address.toLowerCase() === userAddress.toLowerCase()
-  );
-
-  if (!userProfile) {
-    return (
-      <Modal open={open} onClose={onClose}>
-        <ModalDialog>
-          <ModalClose />
-          <Typography level="body1">User profile not found</Typography>
-        </ModalDialog>
-      </Modal>
-    );
-  }
-
-  return (
-    <Modal open={open} onClose={onClose}>
-      <ModalDialog sx={{ maxWidth: 600, width: '100%' }}>
-        <ModalClose />
-        <Typography level="h4" sx={{ mb: 2 }}>User Profile</Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Avatar src={userProfile.profilePicUrl || "./placeholderimage.jpg"} alt={userProfile.username} />
-          <Box sx={{ ml: 2 }}>
-            <Typography level="h5">{userProfile.username}</Typography>
-            <Typography level="body2">{userProfile.address}</Typography>
-          </Box>
-        </Box>
-        <Divider sx={{ my: 2 }} />
-        <Typography level="body1">Description: {userProfile.description}</Typography>
-        <Typography level="h6" sx={{ mt: 2, mb: 1 }}>Community Data</Typography>
-        <List>
-          <ListItem>
-            <ListItemContent>Community ID: {userProfile.communityData.communityId}</ListItemContent>
-          </ListItem>
-          <ListItem>
-            <ListItemContent>Approved: {userProfile.communityData.isApproved ? 'Yes' : 'No'}</ListItemContent>
-          </ListItem>
-          <ListItem>
-            <ListItemContent>
-              Approvers: {userProfile.communityData.approvers.length > 0 ? userProfile.communityData.approvers.join(', ') : 'None'}
-            </ListItemContent>
-          </ListItem>
-        </List>
-        <Typography level="h6" sx={{ mt: 2, mb: 1 }}>Respect Data</Typography>
-        <List>
-          <ListItem>
-            <ListItemContent>Total Respect: {userProfile.respectData.totalRespect}</ListItemContent>
-          </ListItem>
-          <ListItem>
-            <ListItemContent>Average Respect: {userProfile.respectData.averageRespect}</ListItemContent>
-          </ListItem>
-          <ListItem>
-            <ListItemContent>
-              Last 12 Weeks Respect:
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                {userProfile.respectData.last12WeeksRespect.map((respect, index) => (
-                  <Chip key={index} size="sm">{respect}</Chip>
-                ))}
-              </Box>
-            </ListItemContent>
-          </ListItem>
-        </List>
-        <Typography level="h6" sx={{ mt: 2, mb: 1 }}>Contributed Weeks</Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          {userProfile.contributedWeeks.map((week, index) => (
-            <Chip key={index} size="sm">Week {week}</Chip>
-          ))}
-        </Box>
-        <Typography level="h6" sx={{ mt: 2, mb: 1 }}>Contribution History</Typography>
-        {communityData.historicalData.map((weekData, weekIndex) => {
-          const userContributions = weekData.groups.flatMap(group => 
-            group.contributions[userProfile.address] || []
-          );
-          if (userContributions.length === 0) return null;
-
-          return (
-            <Card key={weekIndex} variant="outlined" sx={{ mb: 2 }}>
-              <CardContent>
-                <Typography level="h6">Week {weekData.week}</Typography>
-                {userContributions.map((contribution, contribIndex) => (
-                  <Box key={contribIndex} sx={{ mt: 1 }}>
-                    <Typography level="body2">Name: {contribution.name}</Typography>
-                    <Typography level="body2">Description: {contribution.description}</Typography>
-                    <Typography level="body2">
-                      Links: {contribution.links.map((link, linkIndex) => (
-                        <Chip key={linkIndex} size="sm" sx={{ mr: 1 }}>
-                          <a href={link} target="_blank" rel="noopener noreferrer">Link {linkIndex + 1}</a>
-                        </Chip>
-                      ))}
-                    </Typography>
-                  </Box>
-                ))}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </ModalDialog>
-    </Modal>
-  );
-};
-
 function GamePage() {
   const { ready, authenticated, login, logout } = usePrivy();
   const { wallets } = useWallets();
@@ -250,20 +140,15 @@ function GamePage() {
   const [kernelClient, setKernelClient] = useState(null);
   const [smartAccountAddress, setSmartAccountAddress] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showUserModal, setShowUserModal] = useState(false);
-  const [userAddress, setUserAddress] = useState('');
-  const pathParts = window.location.pathname.split('/');
-  const respectGameIndex = pathParts.indexOf('respectgame');
-  const { id } = useParams();
-  console.log(id);
-  console.log(typeof id);
+  const id = window.location.pathname.split('/').pop();
 
   const findUserGroup = () => {
-    if (!communityData?.currentGameState?.groups) return -1;
-    return communityData.currentGameState.groups.findIndex(group => 
+    if (!currentGameState.groups) return -1;
+    return currentGameState.groups.findIndex(group => 
       group.some(address => address.toLowerCase() === smartAccountAddress.toLowerCase())
     );
   };
+  
 
   useEffect(() => {
     console.log(typeof smartAccountAddress);
@@ -310,26 +195,16 @@ function GamePage() {
   ];
 
   useEffect(() => {
+    console.log("Fetching community data...");
     const fetchCommunityData = async () => {
-      setLoading(true)
-      if (!id) {
-        setError('No community ID provided');
-        setLoading(false);
-        return;
-      }
       try {
-        console.log("FETCHING FOR ID: " + id);
         const response = await fetch(`https://cuddly-powerful-stage.glitch.me/get-community-details/${id}`);
-        console.log(response)
         const data = await response.json();
-        console.log("FETCHED")
         if (data.success) {
-          console.log("SUCCESS")
           console.log(data.data);
           setCommunityData(data.data);
         } else {
           setError('Failed to fetch community data');
-          console.log(data.error);
         }
       } catch (err) {
         setError('An error occurred while fetching data');
@@ -339,14 +214,6 @@ function GamePage() {
     };
 
     fetchCommunityData();
-
-    // Check for user address in URL
-    const pathParts = window.location.pathname.split('/');
-    const userIndex = pathParts.indexOf('user');
-    if (userIndex !== -1 && pathParts[userIndex + 1]) {
-      setUserAddress(pathParts[userIndex + 1]);
-      setShowUserModal(true);
-    }
   }, [id]);
 
   useEffect(() => {
@@ -418,7 +285,7 @@ function GamePage() {
     };
 
     setupSmartAccount();
-  }, []);
+  }, [authenticated, wallets]);
 
   const handleAddContribution = () => {
     setContributions([...contributions, { name: '', description: '', links: [''] }]);
@@ -564,21 +431,15 @@ function GamePage() {
     return <Typography>No data available</Typography>;
   }
 
-  const { basicInfo, currentGameState, members, historicalData } = communityData;
+  const { basicInfo, currentGameState, members, topRespectedUsers, currentWeekData, gameHistory, historicalData } = communityData;
 
   const sortedMembers = members?.sort((a, b) => 
-    parseInt(b.respectData?.totalRespect) - parseInt(a.respectData?.totalRespect)
+    parseInt(b.respectData.totalRespect) - parseInt(a.respectData.totalRespect)
   );
 
   return (
     <Box className="gamepage">
-      <Drawer userAddress={userAddress}/>
-      <UserProfileModal
-        open={showUserModal}
-        onClose={() => setShowUserModal(false)}
-        userAddress={userAddress}
-        communityData={communityData}
-      />
+      <Drawer />
       <Grid container spacing={3}>
         <Grid xs={12} md={5}>
           <Card variant="outlined">
@@ -601,20 +462,32 @@ function GamePage() {
                 </Typography>
               </Box>
             </Box>
-            <Link to={"/invite/" + id}><Button>Invite page</Button></Link>
-
+            <Typography level="h5" sx={{ mt: 3, mb: 2 }}>
+              Members
+            </Typography>
+            {members?.map((member, index) => (
+              <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Avatar src="./placeholderimage.jpg" alt={member.username} />
+                <Typography level="body1" sx={{ ml: 2 }}>
+                  {member.username} ({member.address})
+                </Typography>
+              </Box>
+            ))}
+            {members?.length === 0 && (
+              <Typography level="body2">No members yet</Typography>
+            )}
             <Typography level="h5" sx={{ mt: 3, mb: 2 }}>
               Members (Sorted by Total Respect)
             </Typography>
             {sortedMembers?.map((member, index) => (
               <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Avatar src={member?.profilePicUrl} alt={member.username} />
+                <Avatar src="./placeholderimage.jpg" alt={member.username} />
                 <Box sx={{ ml: 2 }}>
                   <Typography level="body1">
                     {member.username} ({member.address.substring(0, 6)}...{member.address.substring(38)})
                   </Typography>
                   <Typography level="body2" color="neutral">
-                    Total Respect: {member?.respectData?.totalRespect}
+                    Total Respect: {member.respectData.totalRespect}
                   </Typography>
                 </Box>
               </Box>
@@ -721,43 +594,41 @@ function GamePage() {
                 </Button>
               </>
             )}
-            {basicInfo.state === 'ContributionRanking' && (
-              <>
-                <Typography level="p" sx={{ mt: 3, mb: 2 }}>
-                  Ranking phase is ongoing. Please rank the contributions in your group.
-                </Typography>
-                {(() => {
-                  const userGroupIndex = findUserGroup();
-                  if (userGroupIndex === -1) {
-                    return <Typography level="body2">You are not assigned to a group for ranking.</Typography>;
-                  }
-                  const userGroup = currentGameState.groups[userGroupIndex];
-                  console.log(userGroup);
-                  return (
-                    <Box sx={{ mb: 3 }}>
-                      <Typography level="h6">Your Group (Group {userGroupIndex + 1})</Typography>
-                      <DraggableProfileCards
-                        communityId={id}
-                        weekNumber={currentGameState.week}
-                        groupId={userGroupIndex}
-                        roomMembers={userGroup.map(address => ({
-                          address,
-                          username: members.find(member => member.address.toLowerCase() === address.toLowerCase())?.username || 'Unknown'
-                        }))}
-                        kernelClient={kernelClient}
-                        smartAccountAddress={smartAccountAddress}
-                      />
-                    
-                    </Box>
-                  );
-                })()}
-              </>
-            )}
+{basicInfo.state === 'ContributionRanking' && (
+  <>
+    <Typography level="p" sx={{ mt: 3, mb: 2 }}>
+      Ranking phase is ongoing. Please rank the contributions in your group.
+    </Typography>
+    {(() => {
+      const userGroupIndex = findUserGroup();
+      if (userGroupIndex === -1) {
+        return <Typography level="body2">You are not assigned to a group for ranking.</Typography>;
+      }
+      const userGroup = currentGameState.groups[userGroupIndex];
+      return (
+        <Box sx={{ mb: 3 }}>
+          <Typography level="h6">Your Group (Group {userGroupIndex + 1})</Typography>
+          <DraggableProfileCards
+            communityId={id}
+            weekNumber={currentGameState.week}
+            groupId={userGroupIndex}
+            roomMembers={userGroup.map(address => ({
+              address,
+              username: members.find(member => member.address.toLowerCase() === address.toLowerCase())?.username || 'Unknown'
+            }))}
+            kernelClient={kernelClient}
+            smartAccountAddress={smartAccountAddress}
+          />
+        </Box>
+      );
+    })()}
+  </>
+)}
           </Card>
 
           <Typography level="h3" sx={{ mt: 4, mb: 2 }}>Previous Elections</Typography>
-          {historicalData?.length > 0 ? (
-            historicalData.map((electionData, index) => (
+          {communityData.historicalData?.length > 0 ? (
+            communityData.historicalData.map((electionData, index) => (
               <PreviousElectionCard key={index} electionData={electionData} members={members} />
             ))
           ) : (
