@@ -27,18 +27,22 @@ import {
   ListItemContent,
   CardContent
 } from '@mui/joy';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { base } from 'viem/chains';
-import { createPublicClient, http, encodeFunctionData, parseAbi } from 'viem';
-import { providerToSmartAccountSigner, ENTRYPOINT_ADDRESS_V07, bundlerActions } from "permissionless";
-import { createZeroDevPaymasterClient, createKernelAccount, createKernelAccountClient } from "@zerodev/sdk";
-import { signerToEcdsaValidator } from "@zerodev/ecdsa-validator";
-import { KERNEL_V3_1 } from "@zerodev/sdk/constants";
+import { encodeFunctionData, parseAbi } from 'viem';
 import Drawer from './Drawer';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import DraggableProfileCards from './DraggableProfileCards';
 import { useParams, Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Tooltip } from '@mui/joy';
+import ShareIcon from '@mui/icons-material/Share';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+
+
+import { useAuth } from './AuthProvider';
+import customSwal from './customSwal';
+
 
 const ElectionRoom = ({ roomNumber, participants, contributions, rankings, profiles }) => {
   const [expanded, setExpanded] = useState(false);
@@ -100,14 +104,96 @@ const ElectionRoom = ({ roomNumber, participants, contributions, rankings, profi
             </Box>
             {contributions.find(c => c.contributionId.toLowerCase().includes(participant.toLowerCase()))?.contributions.map((contribution, cIndex) => (
               <Box key={cIndex} sx={{ ml: 4, mt: 1 }}>
-                <Typography level="body2">Name: {contribution.name}</Typography>
-                <Typography level="body2">Description: {contribution.description}</Typography>
+                <Typography level="body2" sx={{ fontWeight: 'bold' }}>{contribution.name}</Typography>
+                <Typography level="body2">{contribution.description}</Typography>
                 <Typography level="body2">
-                  Links: {contribution.links.map((link, lIndex) => (
-                    <a key={lIndex} href={link} target="_blank" rel="noopener noreferrer" sx={{ mr: 1 }}>
-                      Link {lIndex + 1}
-                    </a>
-                  ))}
+                  Links: {contribution.links.map((link, lIndex) => {
+                    // Ensure the link is an absolute URL
+                    const absoluteLink = link.startsWith('http://') || link.startsWith('https://')
+                      ? link
+                      : `https://${link}`;
+
+                    return (
+                      <a key={lIndex} href={absoluteLink} target="_blank" rel="noopener noreferrer" sx={{ mr: 1 }}>
+                        <Chip sx={{ mr: 1, cursor: "pointer" }} size="sm">
+                          Link {lIndex + 1}
+                        </Chip>
+                      </a>
+                    );
+                  })}
+</Typography>
+              </Box>
+            ))}
+          </Box>
+        ))}
+      </AccordionDetails>
+    </Accordion>
+  );
+};
+
+const CurrentGameContributions = ({ group, contributions, profiles }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  const getUsername = (address) => {
+    const profile = profiles.find(p => p.user.toLowerCase() === address.toLowerCase());
+    return profile ? profile.username : 'Unknown';
+  };
+
+  return (
+    <Accordion expanded={expanded} onChange={() => setExpanded(!expanded)}>
+      <AccordionSummary
+        indicator={expanded ? '▲' : '▼'}
+        aria-controls="current-game-content"
+        id="current-game-header"
+        sx={{
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          '& .MuiAccordionSummary-content': {
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            width: '100%',
+          },
+        }}
+      >
+        <Typography level="h6" sx={{ mb: 1 }}>Contributions</Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, width: '100%' }}>
+          {group.memberAddresses?.map((participant, index) => (
+            <Box key={index} sx={{ display: 'flex', alignItems: 'center', mr: 2, mb: 1 }}>
+              <Avatar src={profiles.find(p => p.user.toLowerCase() === participant.toLowerCase())?.profilepic || "./placeholderimage.jpg"} alt={getUsername(participant)} size="sm" />
+              <Typography level="body2" sx={{ ml: 1 }}>
+                {getUsername(participant)}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      </AccordionSummary>
+      <AccordionDetails>
+        {group.memberAddresses?.map((participant, index) => (
+          <Box key={index} sx={{ mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <Avatar src={profiles.find(p => p.user.toLowerCase() === participant.toLowerCase())?.profilepic || "./placeholderimage.jpg"} alt={getUsername(participant)} />
+              <Typography level="body1" sx={{ ml: 2 }}>
+                {getUsername(participant)}
+              </Typography>
+            </Box>
+            {contributions.find(c => c.contributionId.toLowerCase().includes(participant.toLowerCase()))?.contributions.map((contribution, cIndex) => (
+              <Box key={cIndex} sx={{ ml: 4, mt: 1 }}>
+                <Typography level="body2" sx={{ fontWeight: 'bold' }}>{contribution.name}</Typography>
+                <Typography level="body2">{contribution.description}</Typography>
+                <Typography level="body2">
+                  Links: {contribution.links.map((link, lIndex) => {
+                    const absoluteLink = link.startsWith('http://') || link.startsWith('https://')
+                      ? link
+                      : `https://${link}`;
+
+                    return (
+                      <a key={lIndex} href={absoluteLink} target="_blank" rel="noopener noreferrer" sx={{ mr: 1 }}>
+                        <Chip sx={{ mr: 1, cursor: "pointer" }} size="sm">
+                          Link {lIndex + 1}
+                        </Chip>
+                      </a>
+                    );
+                  })}
                 </Typography>
               </Box>
             ))}
@@ -122,7 +208,7 @@ const PreviousElectionCard = ({ electionData, profiles }) => {
   return (
     <Card variant="outlined" sx={{ mb: 3 }}>
       <Typography level="h3" gutterBottom>
-        Election #{electionData.weekNumber}
+        Game #{Number(electionData?.weekNumber) + 1}
       </Typography>
       {electionData.rooms?.map((room, index) => (
         <ElectionRoom 
@@ -138,10 +224,44 @@ const PreviousElectionCard = ({ electionData, profiles }) => {
   );
 };
 
-const UserProfileModal = ({ open, onClose, userAddress, profiles }) => {
+const UserProfileModal = ({ open, onClose, userAddress, profiles, communityData }) => {
+  const [copySuccess, setCopySuccess] = useState(false);
+
   const userProfile = profiles?.find(
     profile => profile.user.toLowerCase() === userAddress.toLowerCase()
   );
+
+  const getUserHistory = () => {
+    if (!communityData || !communityData.community.weeklyGames) return [];
+
+    return communityData.community.weeklyGames.map(game => {
+      const userContribution = game.contributions.find(c => 
+        c.contributionId.toLowerCase().includes(userAddress.toLowerCase())
+      );
+      const userRanking = game.rankings.find(r => 
+        r.eventId.toLowerCase().includes(userAddress.toLowerCase())
+      );
+
+      return {
+        gameNumber: Number(game.weekNumber) + 1,
+        contributions: userContribution ? userContribution.contributions : [],
+        ranking: userRanking ? userRanking.ranking : []
+      };
+    }).filter(game => game.contributions.length > 0 || game.ranking.length > 0);
+  };
+
+  const handleShare = () => {
+    const currentUrl = window.location.href;
+    const baseUrl = currentUrl.split('?')[0]; // Remove any existing query parameters
+    const shareUrl = `${baseUrl}?user=${userAddress}`;
+
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000); // Reset after 2 seconds
+    }, (err) => {
+      console.error('Could not copy text: ', err);
+    });
+  };
 
   if (!userProfile) {
     return (
@@ -154,11 +274,24 @@ const UserProfileModal = ({ open, onClose, userAddress, profiles }) => {
     );
   }
 
+  const userHistory = getUserHistory();
+
   return (
     <Modal open={open} onClose={onClose}>
-      <ModalDialog sx={{ maxWidth: 600, width: '100%' }}>
-        <ModalClose />
-        <Typography level="h4" sx={{ mb: 2 }}>User Profile</Typography>
+      <ModalDialog sx={{ maxWidth: 600, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography level="h4">User Profile</Typography>
+          <Tooltip title={copySuccess ? "Copied!" : "Copy share link"} placement="top">
+            <Button
+              variant="outlined"
+              color="neutral"
+              startDecorator={copySuccess ? <ContentCopyIcon /> : <ShareIcon />}
+              onClick={handleShare}
+            >
+              {copySuccess ? "Copied" : "Share"}
+            </Button>
+          </Tooltip>
+        </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
           <Avatar src={userProfile.profilepic || "./placeholderimage.jpg"} alt={userProfile.username} />
           <Box sx={{ ml: 2 }}>
@@ -170,35 +303,91 @@ const UserProfileModal = ({ open, onClose, userAddress, profiles }) => {
         <Typography level="body1">Description: {userProfile.description}</Typography>
         <Typography level="body2">Created At: {new Date(parseInt(userProfile.createdAt) * 1000).toLocaleString()}</Typography>
         <Typography level="body2">Updated At: {new Date(parseInt(userProfile.updatedAt) * 1000).toLocaleString()}</Typography>
+        
+        <Typography level="h5" sx={{ mt: 3, mb: 2 }}>User History</Typography>
+        {userHistory.length > 0 ? (
+          userHistory.map((game, index) => (
+            <Accordion key={index}>
+              <AccordionSummary>Game #{game.gameNumber}</AccordionSummary>
+              <AccordionDetails>
+                <Typography level="h6">Contributions:</Typography>
+                {game.contributions.map((contribution, cIndex) => (
+                  <Box key={cIndex} sx={{ mb: 2 }}>
+                    <Typography level="body2" fontWeight="bold">{contribution.name}</Typography>
+                    <Typography level="body2">{contribution.description}</Typography>
+                    <Typography level="body2">
+                      Links: {contribution.links.map((link, lIndex) => (
+                        <Chip key={lIndex} sx={{ mr: 1 }} size="sm" component="a" href={link} target="_blank">
+                          Link {lIndex + 1}
+                        </Chip>
+                      ))}
+                    </Typography>
+                  </Box>
+                ))}
+                <Typography level="h6">Rankings given:</Typography>
+                {game.ranking.map((rank, rIndex) => (
+                  <Chip key={rIndex} sx={{ mr: 1 }} size="sm">
+                    Rank {rIndex + 1}: {rank}
+                  </Chip>
+                ))}
+              </AccordionDetails>
+            </Accordion>
+          ))
+        ) : (
+          <Typography level="body2">No history available for this user.</Typography>
+        )}
       </ModalDialog>
     </Modal>
   );
 };
 
 function GamePage() {
-  const { ready, authenticated, login, logout } = usePrivy();
-  const { wallets } = useWallets();
+  const { authenticated, sendTransaction, getSmartWalletAddress } = useAuth();
   const [communityData, setCommunityData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [contributions, setContributions] = useState([{ name: '', description: '', links: [''] }]);
-  const [kernelClient, setKernelClient] = useState(null);
-  const [smartAccountAddress, setSmartAccountAddress] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [selectedUserAddress, setSelectedUserAddress] = useState('');
   const { id } = useParams();
-
-  const findUserGroup = () => {
-    if (!communityData?.community?.weeklyGames[0]?.rooms) return -1;
-    return communityData.community.weeklyGames[0].rooms.findIndex(room => 
-      room.memberAddresses.some(address => address.toLowerCase() === smartAccountAddress.toLowerCase())
-    );
-  };
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [smartAccountAddress, setSmartAccountAddress] = useState(null);
 
   useEffect(() => {
-    console.log('Smart Account Address:', smartAccountAddress);
-  }, [smartAccountAddress]);
+    const params = new URLSearchParams(location.search);
+    const userAddress = params.get('user');
+    if (userAddress) {
+      setSelectedUserAddress(userAddress);
+      setShowUserModal(true);
+      // Remove the 'user' parameter from the URL
+      params.delete('user');
+      navigate({ search: params.toString() }, { replace: true });
+    }
+  }, [location, navigate]);
+
+  useEffect(() => {
+    const fetchSmartAccountAddress = async () => {
+      const address = await getSmartWalletAddress();
+      setSmartAccountAddress(address);
+    };
+    fetchSmartAccountAddress();
+  }, [getSmartWalletAddress]);
+
+  const findUserGroup = () => {
+    const weeklyGames = communityData?.community?.weeklyGames;
+    if (!weeklyGames || weeklyGames.length === 0) return -1;
+  
+    const currentGame = weeklyGames[weeklyGames.length - 1];
+    if (!currentGame.rooms) return -1;
+  
+    return currentGame.rooms.findIndex(room => 
+      room.memberAddresses.some(address => 
+        address.toLowerCase() === smartAccountAddress?.toLowerCase()
+      )
+    );
+  };
 
   const contractAddress = '0xb51658dD0d05F4a7c038c3035f6cC839e8378c32';
   const abi = [
@@ -246,9 +435,9 @@ function GamePage() {
         const response = await fetch(`https://respectgameapi-d34365572ae7.herokuapp.com/api/community/${id}`);
         const data = await response.json();
         setCommunityData(data.data);
-        console.log(data)
+        console.log(data);
       } catch (err) {
-        setError('An error occurred while fetching data');
+        customSwal('An error occurred while fetching data');
         console.log(err);
       } finally {
         setLoading(false);
@@ -257,77 +446,6 @@ function GamePage() {
 
     fetchCommunityData();
   }, [id]);
-
-  useEffect(() => {
-    const setupSmartAccount = async () => {
-      if (authenticated && wallets?.length > 0) {
-        setLoading(true);
-        try {
-          let provider;
-          const embeddedWallet = wallets.find((wallet) => wallet.walletClientType === 'privy');
-          if (embeddedWallet) {
-            provider = await embeddedWallet.getEthereumProvider();
-          } else {
-            const externalWallet = wallets[0];
-            provider = await externalWallet.getEthereumProvider();
-          }
-
-          const smartAccountSigner = await providerToSmartAccountSigner(provider);
-          
-          const publicClient = createPublicClient({
-            chain: base,
-            transport: http('https://rpc.zerodev.app/api/v2/bundler/a1511783-a97b-4114-9d91-c86b20673729'),
-          });
-
-          const entryPoint = ENTRYPOINT_ADDRESS_V07;
-          const kernelVersion = KERNEL_V3_1;
-
-          const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
-            signer: smartAccountSigner,
-            entryPoint,
-            kernelVersion,
-          });
-
-          const account = await createKernelAccount(publicClient, {
-            plugins: {
-              sudo: ecdsaValidator,
-            },
-            entryPoint,
-            kernelVersion,
-          });
-          setSmartAccountAddress(account.address);
-
-          const client = createKernelAccountClient({
-            account,
-            chain: base,
-            entryPoint,
-            bundlerTransport: http('https://rpc.zerodev.app/api/v2/bundler/a1511783-a97b-4114-9d91-c86b20673729'),
-            middleware: {
-              sponsorUserOperation: async ({ userOperation }) => {
-                const zerodevPaymaster = createZeroDevPaymasterClient({
-                  chain: base,
-                  entryPoint,
-                  transport: http('https://rpc.zerodev.app/api/v2/paymaster/a1511783-a97b-4114-9d91-c86b20673729'),
-                });
-                return await zerodevPaymaster.sponsorUserOperation({
-                  userOperation,
-                  entryPoint,
-                });
-              }
-            }
-          });
-
-          setKernelClient(client);
-        } catch (error) {
-          setError(`Error setting up smart account: ${error.message}`);
-        } finally {
-          setLoading(false);
-        }
-      }
-    };
-
-    setupSmartAccount();
-  }, [authenticated, wallets]);
 
   const handleAddContribution = () => {
     setContributions([...contributions, { name: '', description: '', links: [''] }]);
@@ -365,28 +483,24 @@ function GamePage() {
   const handleSubmitContributions = async () => {
     console.log('Attempting to submit contributions...');
     
-    if (!kernelClient) {
-      setError('Smart account not set up. Please try again.');
-      console.error('Smart account not set up');
+    if (!authenticated) {
+      customSwal('Please authenticate to submit contributions.');
       return;
     }
   
     if (!communityData) {
-      setError('Community data not loaded. Please refresh the page.');
-      console.error('Community data not loaded');
+      customSwal('Community data not loaded. Please refresh the page.');
       return;
     }
   
     if (communityData.community.state !== "0") {
-      setError('Contributions can only be submitted during the Contribution Submission phase.');
-      console.error('Incorrect community state:', communityData.community.state);
+      customSwal('Contributions can only be submitted during the Contribution Submission phase.');
       return;
     }
   
-    const isMember = communityData.community.memberAddresses.some(address => address.toLowerCase() === smartAccountAddress.toLowerCase());
+    const isMember = communityData.community.memberAddresses.some(address => address.toLowerCase() === smartAccountAddress?.toLowerCase());
     if (!isMember) {
-      setError('You must be a member of this community to submit contributions.');
-      console.error('User is not a member of the community');
+      customSwal('You must be a member of this community to submit contributions.');
       return;
     }
   
@@ -395,20 +509,15 @@ function GamePage() {
     );
   
     if (validContributions.length === 0) {
-      setError('Please add at least one valid contribution with name, description, and at least one non-empty link.');
-      console.error('No valid contributions found');
+      customSwal('Please add at least one valid contribution with name, description, and at least one non-empty link.');
       return;
     }
   
     const formattedContributions = validContributions.map(c => ({
       name: c.name,
       description: c.description,
-      links: c.links.filter(link => link !== '') // Remove any empty links
+      links: c.links.filter(link => link !== '')
     }));
-  
-    console.log('Community ID:', id);
-    console.log('Smart Account Address:', smartAccountAddress);
-    console.log('Formatted contributions:', JSON.stringify(formattedContributions, null, 2));
   
     setIsSubmitting(true);
     try {
@@ -418,51 +527,25 @@ function GamePage() {
         args: [BigInt(id), formattedContributions]
       });
   
-      console.log('Encoded function data:', callData);
-  
-      // Send the user operation without gas estimation
-      const userOpHash = await kernelClient.sendUserOperation({
-        userOperation: {
-          callData: await kernelClient.account.encodeCallData({
-            to: contractAddress,
-            value: BigInt(0),
-            data: callData,
-          }),
-        },
+      const txHash = await sendTransaction({
+        to: contractAddress,
+        value: BigInt(0),
+        data: callData
       });
-      console.log('User operation hash:', userOpHash);
-  
-      const bundlerClient = kernelClient.extend(bundlerActions(ENTRYPOINT_ADDRESS_V07));
-      console.log('Waiting for user operation receipt...');
-      const receipt = await bundlerClient.waitForUserOperationReceipt({
-        hash: userOpHash,
-      });
-      const txHash = receipt.receipt.transactionHash;
+      
       console.log(`Contributions submitted successfully! Transaction hash: ${txHash}`);
-      
-      // Reset the contributions after successful submission
+      customSwal(`Contributions submitted successfully! Transaction hash: ${txHash}`);
       setContributions([{ name: '', description: '', links: [''] }]);
-      
-      // Optionally, refresh the community data here
-      // await fetchCommunityData();
     } catch (err) {
-      console.error('Full error object:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
-      if (err.message.includes('user rejected transaction')) {
-        setError('Transaction was rejected by the user.');
-      } else if (err.message.includes('insufficient funds')) {
-        setError('Insufficient funds to execute the transaction.');
-      } else if (err.message.includes('execution reverted')) {
-        setError('Transaction reverted. You may not have permission to submit contributions or the community might be in an incorrect state.');
-      } else {
-        setError(`Error submitting contributions: ${err.message}`);
-      }
+      console.error('Error submitting contributions:', err);
+      customSwal(`Error submitting contributions: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   if (loading) {
-    return <CircularProgress />;
+    return <div style={{height:"100vh", width:"100%", display:"flex", alignItems:"center", justifyContent:"center"}}><CircularProgress /></div>;
   }
 
   if (error) {
@@ -474,16 +557,25 @@ function GamePage() {
   }
 
   const { community, profiles } = communityData;
-  const currentGame = community.weeklyGames[0];
+  const currentGame = community.weeklyGames.length > 0 
+  ? community.weeklyGames[community.weeklyGames.length - 1] 
+  : null;
+  const getMemberProfile = (address) => {
+    return profiles.find(profile => profile.user.toLowerCase() === address.toLowerCase());
+  };
 
   return (
     <Box className="gamepage">
       <Drawer userAddress={smartAccountAddress}/>
       <UserProfileModal
         open={showUserModal}
-        onClose={() => setShowUserModal(false)}
+        onClose={() => {
+          setShowUserModal(false);
+          setSelectedUserAddress('');
+        }}
         userAddress={selectedUserAddress}
         profiles={profiles}
+        communityData={communityData}
       />
       <Grid container spacing={3}>
         <Grid xs={12} md={5}>
@@ -493,15 +585,11 @@ function GamePage() {
                 <img 
                   src={community.imageUrl} 
                   alt="Community"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = "./placeholderimage.jpg";
-                  }}
                 />
               </AspectRatio>
               <Box>
                 <Typography level="h4">{community.name || "Unnamed Community"}</Typography>
-                <Typography level="body2">{community.description || "No description available"}</Typography>
+                <Typography level="body2" style={{wordBreak: "break-word"}}>{community.description || "No description available"}</Typography>
                 <Typography level="body2" sx={{ mt: 1 }}>
                   {community.memberAddresses.length} members | {community.games.length} respect games
                 </Typography>
@@ -510,19 +598,39 @@ function GamePage() {
             <Link to={"/invite/" + id}><Button>Invite page</Button></Link>
 
             <Typography level="h5" sx={{ mt: 3, mb: 2 }}>
-              Members
+              Members ({community.memberAddresses.length})
             </Typography>
-            {profiles.map((profile, index) => (
-              <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Avatar src={profile.profilepic} alt={profile.username} />
-                <Box sx={{ ml: 2 }}>
-                  <Typography level="body1">
-                    {profile.username} ({profile.user.substring(0, 6)}...{profile.user.substring(38)})
-                  </Typography>
+            {community.memberAddresses.map((address, index) => {
+              const profile = getMemberProfile(address);
+              return (
+                <Box 
+                  key={index} 
+                  sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    mb: 2, 
+                    cursor: 'pointer' 
+                  }}
+                  onClick={() => {
+                    setSelectedUserAddress(address);
+                    setShowUserModal(true);
+                    // Update the URL when clicking on a user
+                    navigate(`?user=${address}`, { replace: true });
+                  }}
+                >
+                  <Avatar 
+                    src={profile?.profilepic || "./placeholderimage.jpg"} 
+                    alt={profile?.username || 'Unknown'} 
+                  />
+                  <Box sx={{ ml: 2 }}>
+                    <Typography level="body1">
+                      {profile?.username || 'Unknown'} ({address.substring(0, 6)}...{address.substring(38)})
+                    </Typography>
+                  </Box>
                 </Box>
-              </Box>
-            ))}
-            {profiles.length === 0 && (
+              );
+            })}
+            {community.memberAddresses.length === 0 && (
               <Typography level="body2">No members yet</Typography>
             )}
           </Card>
@@ -530,22 +638,16 @@ function GamePage() {
         <Grid xs={12} md={7}>
           <Card variant="outlined">
             <Typography level="h2" gutterBottom>
-              Current Game State
+              Current Game (#{(Number(currentGame?.weekNumber) + 1) || 1})
             </Typography>
             <Typography level="body1" gutterBottom>
-              Phase: {community.state === "0" ? "Contribution Submission" : "Contribution Ranking"}
-            </Typography>
-            <Typography level="body1" gutterBottom>
-              Current Week: {currentGame.weekNumber}
+              {community.state === "0" ? "Contribution Submission" : "Contribution Ranking"} is ongoing for game number {(Number(currentGame?.weekNumber) + 1) || 1}! {community.state === "0" ? "Submit your contributions to participate." : "Rank the contributions in your group."}
             </Typography>
             {community.state === "0" && (
               <>
-                <Typography level="p" sx={{ mt: 3, mb: 2 }}>
-                  Submit your contributions to participate.
-                </Typography>
                 {contributions?.map((contribution, index) => (
-                  <Box key={index} sx={{ mb: 3 }}>
-                    <Typography level="h6">Contribution {index + 1}</Typography>
+                  <Box key={index} sx={{ mb: 3, borderLeft:"3px solid #bc92fc", paddingLeft:"10px"}}>
+                    <Typography level="h5" sx={{fontWeight:"600", marginBottom:"5px"}}>Contribution {index + 1}</Typography>
                     <Input 
                       placeholder="Contribution Name"
                       value={contribution.name}
@@ -606,11 +708,11 @@ function GamePage() {
                   fullWidth 
                   startDecorator={<AddIcon />}
                   onClick={handleAddContribution}
-                  sx={{ mb: 2 }}
+                  sx={{ mb: 0 }}
                 >
                   Add Another Contribution
                 </Button>
-                <Divider sx={{ my: 3 }} />
+                <Divider sx={{ my: 1 }} />
                 <Button 
                   variant="solid" 
                   fullWidth
@@ -623,9 +725,6 @@ function GamePage() {
             )}
             {community.state === "1" && (
               <>
-                <Typography level="p" sx={{ mt: 3, mb: 2 }}>
-                  Ranking phase is ongoing. Please rank the contributions in your group.
-                </Typography>
                 {(() => {
                   const userGroupIndex = findUserGroup();
                   if (userGroupIndex === -1) {
@@ -635,15 +734,19 @@ function GamePage() {
                   return (
                     <Box sx={{ mb: 3 }}>
                       <Typography level="h6">Your Group (Group {userGroupIndex + 1})</Typography>
+                      <CurrentGameContributions 
+                        group={userGroup}
+                        contributions={currentGame.contributions}
+                        profiles={profiles}
+                      />
                       <DraggableProfileCards
                         communityId={id}
-                        weekNumber={currentGame.weekNumber}
+                        weekNumber={currentGame?.weekNumber}
                         groupId={userGroupIndex}
                         roomMembers={userGroup.memberAddresses.map(address => ({
                           address,
                           username: profiles.find(profile => profile.user.toLowerCase() === address.toLowerCase())?.username || 'Unknown'
                         }))}
-                        kernelClient={kernelClient}
                         smartAccountAddress={smartAccountAddress}
                       />
                     </Box>
@@ -653,14 +756,21 @@ function GamePage() {
             )}
           </Card>
 
-          <Typography level="h3" sx={{ mt: 4, mb: 2 }}>Previous Elections</Typography>
+          <Typography level="h3" sx={{ mt: 4, mb: 2 }}>Previous Games</Typography>
           {community.weeklyGames.length > 1 ? (
-            community.weeklyGames.slice(1).map((electionData, index) => (
-              <PreviousElectionCard key={index} electionData={electionData} profiles={profiles} />
-            ))
-          ) : (
-            <Typography level="body1">No previous elections available yet.</Typography>
-          )}
+              community.weeklyGames
+                .filter(game => game.id !== community.currentGame)
+                .sort((a, b) => parseInt(b.weekNumber) - parseInt(a.weekNumber))
+                .map((electionData, index) => (
+                  <PreviousElectionCard 
+                    key={electionData.id} 
+                    electionData={electionData} 
+                    profiles={profiles} 
+                  />
+                ))
+            ) : (
+              <Typography level="body1">No previous games available yet.</Typography>
+            )}
         </Grid>
       </Grid>
     </Box>

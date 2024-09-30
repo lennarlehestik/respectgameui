@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAuth } from './AuthProvider'; // Import from AuthProvider instead of useAuth
 import Box from '@mui/joy/Box';
 import Drawer from '@mui/joy/Drawer';
 import Button from '@mui/joy/Button';
@@ -19,14 +19,27 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import AddIcon from '@mui/icons-material/Add';
 import LoginIcon from '@mui/icons-material/Login';
 import LogoutIcon from '@mui/icons-material/Logout';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
-export default function InsetDrawer() {
+export default function InsetDrawer({bg}) {
   const [open, setOpen] = React.useState(false);
-  const { login, logout, authenticated, user } = usePrivy();
+  const { login, logout, authenticated, user, getSmartWalletAddress, ready } = useAuth();
+  const navigate = useNavigate();
+  const [smartAccountAddress, setSmartAccountAddress] = React.useState(null);
+
+  React.useEffect(() => {
+    const fetchSmartWalletAddress = async () => {
+      if (authenticated && ready) {
+        const address = await getSmartWalletAddress();
+        setSmartAccountAddress(address);
+      }
+    };
+    fetchSmartWalletAddress();
+  }, [authenticated, ready, getSmartWalletAddress]);
 
   const handleLogin = async () => {
     try {
+      setOpen(false);
       await login();
     } catch (error) {
       console.error('Login failed:', error);
@@ -36,14 +49,15 @@ export default function InsetDrawer() {
   const handleLogout = async () => {
     try {
       await logout();
+      setSmartAccountAddress(null);
     } catch (error) {
       console.error('Logout failed:', error);
     }
   };
 
   return (
-    <Sheet sx={{p:2, width:"100%", height:"50px", background:"white", zIndex:"10", position:"fixed", top:"0", left:"0", display:"flex", alignItems:"center", justifyContent:"space-between"}}>
-      <Link to="/">Home</Link>
+    <Sheet sx={{p:2, width:"100%", height:"50px", background:bg ? bg : "white", zIndex:"10", position:"fixed", top:"0", left:"0", display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+      <Link to="/" style={{textDecoration:"none", fontSize:"18px", fontWeight:600}}>Respect Game</Link>
       <Button
         variant="outlined"
         color="neutral"
@@ -79,21 +93,31 @@ export default function InsetDrawer() {
         >
           <DialogTitle>Respect Game</DialogTitle>
           {authenticated && user && (
-            <Typography level="body-sm" sx={{ color: 'text.secondary' }}>
-              {JSON.stringify(user.wallet?.address)}
-            </Typography>
+            <>
+              {/*<Typography level="body-sm" sx={{ color: 'text.secondary' }}>
+                EOA: {user.wallet?.address}
+              </Typography>*/}
+              <Sheet>
+              <Typography level="body-sm" sx={{ color: 'text.secondary' }}>
+                Your account address:
+              </Typography>
+              <Typography level="body-sm" sx={{ color: 'text.primary'}}>
+              {smartAccountAddress || 'Initializing...'}
+              </Typography>
+              </Sheet>
+            </>
           )}
           <ModalClose />
           {authenticated ? (
             <Link to="/makedao">
-            <Button
-              variant="solid"
-              color="primary"
-              startDecorator={<AddIcon />}
-              sx={{ mb: 2 }}
-            >
-              Create Community
-            </Button>
+              <Button
+                variant="solid"
+                color="primary"
+                startDecorator={<AddIcon />}
+                sx={{ mb: 2 }}
+              >
+                Create Community
+              </Button>
             </Link>
           ) : (
             <Button
@@ -102,8 +126,9 @@ export default function InsetDrawer() {
               startDecorator={<LoginIcon />}
               onClick={handleLogin}
               sx={{ mb: 2 }}
+              disabled={!ready}
             >
-              Login
+              {!ready ? 'Initializing...' : 'Login'}
             </Button>
           )}
 
@@ -116,42 +141,13 @@ export default function InsetDrawer() {
                 </Typography>
                 <List>
                   <ListItem>
-                    <ListItemButton>
+                    <ListItemButton component={Link} to="/">
                       <HomeIcon sx={{ mr: 2 }} />
                       Home
                     </ListItemButton>
                   </ListItem>
-                  {authenticated && (
-                    <ListItem>
-                      <ListItemButton>
-                        <GroupIcon sx={{ mr: 2 }} />
-                        My Communities
-                      </ListItemButton>
-                    </ListItem>
-                  )}
-                  <ListItem>
-                    <ListItemButton onClick={() => window.location.href = '/draggableprofilecards'}>
-                      <EmojiEventsIcon sx={{ mr: 2 }} />
-                      Try draggable voting ui
-                    </ListItemButton>
-                  </ListItem>
                 </List>
               </ListItem>
-              {authenticated && (
-                <ListItem nested sx={{ mt: 2 }}>
-                  <Typography level="body-sm" sx={{ fontWeight: 'bold', my: 1 }}>
-                    Account
-                  </Typography>
-                  <List>
-                    <ListItem>
-                      <ListItemButton>
-                        <SettingsIcon sx={{ mr: 2 }} />
-                        Settings
-                      </ListItemButton>
-                    </ListItem>
-                  </List>
-                </ListItem>
-              )}
             </List>
           </Box>
           <Divider />
@@ -162,8 +158,9 @@ export default function InsetDrawer() {
                 color="danger" 
                 onClick={handleLogout}
                 startDecorator={<LogoutIcon />}
+                disabled={!ready}
               >
-                Logout
+                {!ready ? 'Processing...' : 'Logout'}
               </Button>
             ) : (
               <Button 
@@ -171,8 +168,9 @@ export default function InsetDrawer() {
                 color="primary" 
                 onClick={handleLogin}
                 startDecorator={<LoginIcon />}
+                disabled={!ready}
               >
-                Login
+                {!ready ? 'Initializing...' : 'Login'}
               </Button>
             )}
             <Button variant="outlined" color="neutral" onClick={() => setOpen(false)}>

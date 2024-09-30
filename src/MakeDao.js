@@ -1,13 +1,8 @@
 /* global BigInt */
 
-import React, { useEffect, useState } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { optimism, base } from 'viem/chains';
-import { createPublicClient, http, encodeFunctionData, parseAbi } from 'viem';
-import { providerToSmartAccountSigner, ENTRYPOINT_ADDRESS_V07, bundlerActions } from "permissionless";
-import { createZeroDevPaymasterClient, createKernelAccount, createKernelAccountClient } from "@zerodev/sdk";
-import { signerToEcdsaValidator } from "@zerodev/ecdsa-validator";
-import { KERNEL_V3_1 } from "@zerodev/sdk/constants";
+import React, { useState, useEffect, useRef } from 'react';
+import { base } from 'viem/chains';
+import { encodeFunctionData, parseAbi } from 'viem';
 import { 
   Box, 
   Typography, 
@@ -20,11 +15,14 @@ import {
   Alert,
   CircularProgress
 } from '@mui/joy';
-import ImageUpload from './ImageUpload';  // Assuming ImageUpload component is in a separate file
+import { useAuth } from './AuthProvider';
+import ImageUpload from './ImageUpload';
+import Drawer from './Drawer';
+import customSwal from './customSwal';
+import Confetti from './Confetti';
 
 function MakeDao() {
-  const { ready, authenticated, login, logout } = usePrivy();
-  const { wallets } = useWallets();
+  const { authenticated, ready, login, logout, sendTransaction, getSmartWalletAddress } = useAuth();
   const [communityName, setCommunityName] = useState('');
   const [communityDescription, setCommunityDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
@@ -32,127 +30,55 @@ function MakeDao() {
   const [tokenSymbol, setTokenSymbol] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [kernelClient, setKernelClient] = useState(null);
-  const [smartAccountAddress, setSmartAccountAddress] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [logs, setLogs] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [smartWalletAddress, setSmartWalletAddress] = useState('');
+
+  const confettiRef = useRef(null);
+
+  const shootConfetti = () => {
+    if (confettiRef.current) {
+      confettiRef.current.triggerConfetti();
+    } else {
+      console.error('Confetti ref is not available');
+    }
+  };
+
 
   const contractAddress = '0x589302b32b60434470C47898905eBe1ADA67E151';
   const abi = parseAbi([
     "function createCommunity(string _name, string _description, string _imageUrl, string _tokenName, string _tokenSymbol) public returns (uint256)"
   ]);
 
-  const addLog = (message) => {
-    setLogs((prevLogs) => [...prevLogs, `${new Date().toISOString()}: ${message}`]);
-    console.log(message);
-  };
-
   useEffect(() => {
-    const setupSmartAccount = async () => {
-      if (ready && authenticated && wallets.length > 0 && !kernelClient) {
-        setIsLoading(true);
-        addLog('Starting smart account setup');
-        try {
-          let provider;
-          const embeddedWallet = wallets.find((wallet) => wallet.walletClientType === 'privy');
-          if (embeddedWallet) {
-            addLog('Using embedded wallet');
-            provider = await embeddedWallet.getEthereumProvider();
-          } else {
-            addLog('Using external wallet');
-            const externalWallet = wallets[0];
-            provider = await externalWallet.getEthereumProvider();
-          }
-
-          addLog('Got Ethereum provider');
-          const smartAccountSigner = await providerToSmartAccountSigner(provider);
-          addLog('Created smart account signer');
-          
-          const publicClient = createPublicClient({
-            chain: base,
-            transport: http('https://rpc.zerodev.app/api/v2/bundler/a1511783-a97b-4114-9d91-c86b20673729'),
-          });
-          addLog('Created public client');
-
-          const entryPoint = ENTRYPOINT_ADDRESS_V07;
-          const kernelVersion = KERNEL_V3_1;
-
-          addLog('Creating ECDSA validator...');
-          const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
-            signer: smartAccountSigner,
-            entryPoint,
-            kernelVersion,
-          });
-          addLog('ECDSA validator created');
-
-          addLog('Creating Kernel account...');
-          const account = await createKernelAccount(publicClient, {
-            plugins: {
-              sudo: ecdsaValidator,
-            },
-            entryPoint,
-            kernelVersion,
-          });
-          addLog(`Kernel account created: ${account.address}`);
-          setSmartAccountAddress(account.address);
-
-          addLog('Creating Kernel account client...');
-          const client = createKernelAccountClient({
-            account,
-            chain: base,
-            entryPoint,
-            bundlerTransport: http('https://rpc.zerodev.app/api/v2/bundler/a1511783-a97b-4114-9d91-c86b20673729'),
-            middleware: {
-              sponsorUserOperation: async ({ userOperation }) => {
-                addLog('Sponsoring user operation...');
-                const zerodevPaymaster = createZeroDevPaymasterClient({
-                  chain: base,
-                  entryPoint,
-                  transport: http('https://rpc.zerodev.app/api/v2/paymaster/a1511783-a97b-4114-9d91-c86b20673729'),
-                });
-                const result = await zerodevPaymaster.sponsorUserOperation({
-                  userOperation,
-                  entryPoint,
-                });
-                addLog('User operation sponsored');
-                return result;
-              }
-            }
-          });
-          addLog('Kernel account client created');
-
-          setKernelClient(client);
-          addLog('Smart account setup complete');
-        } catch (error) {
-          addLog(`Error setting up smart account: ${error.message}`);
-          setError(`Error setting up smart account: ${error.message}`);
-        } finally {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    setupSmartAccount();
-  }, [ready, authenticated, wallets]);
+    if (authenticated && ready) {
+      const address = getSmartWalletAddress();
+      setSmartWalletAddress(address || 'Initializing...');
+      console.log(`Smart wallet address: ${address}`);
+    }
+  }, [authenticated, ready, getSmartWalletAddress]);
 
   const handleImageUploaded = (url) => {
     setImageUrl(url);
-    addLog(`Image uploaded successfully: ${url}`);
+    console.log(`Image uploaded successfully: ${url}`);
+    customSwal("Image uploaded successfully.");
   };
 
   const handleCreateCommunity = async () => {
-    if (!kernelClient) {
-      setError('Smart account not set up. Please try again.');
+    if (!authenticated || !ready) {
+      customSwal("Wallet not initialized. Please try again.");
       return;
     }
 
     if (!imageUrl) {
-      setError('Please upload an image before creating the community.');
+      customSwal("Please upload an image before creating the community.");
       return;
     }
 
-    setIsLoading(true);
-    addLog('Creating community...');
+    setIsSubmitting(true);
+    setError('');
+    setSuccess('');
+    console.log('Creating community...');
+
     try {
       const callData = encodeFunctionData({
         abi,
@@ -160,24 +86,13 @@ function MakeDao() {
         args: [communityName, communityDescription, imageUrl, tokenName, tokenSymbol]
       });
 
-      const userOpHash = await kernelClient.sendUserOperation({
-        userOperation: {
-          callData: await kernelClient.account.encodeCallData({
-            to: contractAddress,
-            value: BigInt(0),
-            data: callData,
-          }),
-        },
+      const txHash = await sendTransaction({
+        to: contractAddress,
+        value: BigInt(0),
+        data: callData
       });
-      addLog(`UserOperation hash: ${userOpHash}`);
-      
-      const bundlerClient = kernelClient.extend(bundlerActions(ENTRYPOINT_ADDRESS_V07));
-      const receipt = await bundlerClient.waitForUserOperationReceipt({
-        hash: userOpHash,
-      });
-      const txHash = receipt.receipt.transactionHash;
-      setSuccess(`Community created! Transaction hash: ${txHash}`);
-      addLog(`Transaction completed. Hash: ${txHash}`);
+      customSwal("Community created! Transaction hash: " + txHash);
+      console.log(`Transaction sent. Hash: ${txHash}`);
 
       // Reset form fields
       setCommunityName('');
@@ -186,30 +101,12 @@ function MakeDao() {
       setTokenName('');
       setTokenSymbol('');
     } catch (err) {
-      setError(`Error creating community: ${err.message}`);
-      addLog(`Error creating community: ${err.message}`);
+      customSwal("Error creating community:" + err.message);
+      console.error(`Error creating community:`, err);
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      setSuccess('Logged out successfully');
-      setKernelClient(null);
-      setSmartAccountAddress('');
-      setLogs([]);
-    } catch (err) {
-      setError(`Error logging out: ${err.message}`);
-    }
-  };
-
-  if (!ready) {
-    return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-      <CircularProgress />
-    </Box>;
-  }
 
   return (
     <Box 
@@ -222,6 +119,8 @@ function MakeDao() {
         overflow: 'hidden'
       }}
     >
+      <Confetti ref={confettiRef} duration={3000} />
+      <Drawer bg={"none"}/>
       <Box 
         className="makedaoleft" 
         sx={{ 
@@ -258,20 +157,13 @@ function MakeDao() {
           }}
         >
           <Typography level="h3" sx={{ mb: 1 }}>Create a Respect Game Community</Typography>
-          
+          {/*<button onClick={shootConfetti}>Shoot confetti</button>*/}
           {!authenticated ? (
             <Button fullWidth onClick={login} sx={{ mb: 1 }}>
               Login to Create Community
             </Button>
           ) : (
             <>
-              <Typography level="body2" sx={{ mb: 0, fontSize:"12px" }}>
-                EOA: {wallets[0]?.address}
-              </Typography>
-              <Typography level="body2" sx={{ mb: 0, fontSize:"12px" }}>
-                Smart Account: {smartAccountAddress || 'Initializing...'}
-              </Typography>
-
               <FormControl>
                 <FormLabel>Community name</FormLabel>
                 <Input 
@@ -321,9 +213,9 @@ function MakeDao() {
                 fullWidth 
                 sx={{ mt: 2 }} 
                 onClick={handleCreateCommunity}
-                disabled={isLoading || !kernelClient}
+                disabled={isSubmitting || !ready}
               >
-                {isLoading ? 'Processing...' : 'Create Respect Game Community'}
+                {isSubmitting ? 'Processing...' : 'Create Respect Game Community'}
               </Button>
 
               <Button 
@@ -331,7 +223,7 @@ function MakeDao() {
                 color="neutral" 
                 fullWidth 
                 sx={{ mt: 2 }} 
-                onClick={handleLogout}
+                onClick={logout}
               >
                 Logout
               </Button>

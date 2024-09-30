@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { Typography, Avatar, Box, Button, CircularProgress } from '@mui/joy';
-import { encodeFunctionData } from 'viem';
-import { providerToSmartAccountSigner, ENTRYPOINT_ADDRESS_V07, bundlerActions } from "permissionless";
+import { Typography, Avatar, Box, Button, CircularProgress, Alert } from '@mui/joy';
+import { encodeFunctionData, parseAbi } from 'viem';
+import { useAuth } from './AuthProvider';
+import customSwal from './customSwal';
 
 const grid = 8;
 
@@ -26,7 +27,6 @@ const getListStyle = isDraggingOver => ({
   background: isDraggingOver ? 'transparent' : 'transparent',
   padding: grid,
   width: '100%',
-  maxWidth: '300px',
   margin: '0 auto'
 });
 
@@ -34,23 +34,35 @@ const DraggableProfileCards = ({
   communityId, 
   weekNumber, 
   groupId, 
-  roomMembers, 
-  kernelClient, 
-  smartAccountAddress 
+  roomMembers
 }) => {
+  const { authenticated, login, sendTransaction, getSmartWalletAddress, ready } = useAuth();
   const [profiles, setProfiles] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [smartAccountAddress, setSmartAccountAddress] = useState(null);
+
+  useEffect(() => {
+    const fetchSmartWalletAddress = async () => {
+      if (authenticated && ready) {
+        const address = await getSmartWalletAddress();
+        setSmartAccountAddress(address);
+        console.log(`Smart wallet address: ${address}`);
+      }
+    };
+    fetchSmartWalletAddress();
+  }, [authenticated, ready, getSmartWalletAddress]);
 
   useEffect(() => {
     if (roomMembers) {
-      console.log('Room members:', roomMembers);
-      setProfiles(roomMembers.map((member, index) => ({
-        id: `profile-${index}`,
+      const newProfiles = roomMembers.map((member, index) => ({
+        id: `profile-${member.address}`,
         name: member.username || `Address ${member.address.slice(0, 6)}...`,
-        avatar: member.avatar || '/placeholderimage.jpg',
+        avatar: member.profilePic || '/placeholderimage.jpg',
         address: member.address
-      })));
+      }));
+      setProfiles(newProfiles);
     }
   }, [roomMembers]);
 
@@ -67,29 +79,35 @@ const DraggableProfileCards = ({
   };
 
   const handleSubmitRanking = async () => {
-    setIsSubmitting(true);
-    setError(null);
+    if (!authenticated || !ready) {
+      customSwal("Please authenticate to submit ranking.");
+      return;
+    }
 
-    const rankingContractAddress = '0xe0DF8059637EEB20464Faa169227DFeA819c36d7'; // Rankings contract address
-    const abi = [
-      {
-        inputs: [
-          { internalType: "uint256", name: "_communityId", type: "uint256" },
-          { internalType: "uint256", name: "_weekNumber", type: "uint256" },
-          { internalType: "uint256", name: "_groupId", type: "uint256" },
-          { internalType: "uint256[]", name: "_ranking", type: "uint256[]" }
-        ],
-        name: "submitRanking",
-        outputs: [],
-        stateMutability: "nonpayable",
-        type: "function"
-      }
-    ];
+    setIsSubmitting(true);
+    setError('');
+    setSuccess('');
+    console.log('Submitting ranking...');
+    customSwal("Submitting ranking...");
+
+    const rankingContractAddress = '0xe0DF8059637EEB20464Faa169227DFeA819c36d7';
+    const abi = parseAbi([
+      "function submitRanking(uint256 _communityId, uint256 _weekNumber, uint256 _groupId, uint256[] _ranking) public"
+    ]);
 
     try {
-      const ranking = profiles.map(profile => 
-        roomMembers.findIndex(member => member.address === profile.address) + 1
+      // Create a mapping of addresses to their current positions
+      const addressPositions = profiles.reduce((acc, profile, index) => {
+        acc[profile.address.toLowerCase()] = index;
+        return acc;
+      }, {});
+
+      // Calculate rankings based on the original order of roomMembers
+      const ranking = roomMembers.map(member => 
+        addressPositions[member.address.toLowerCase()] + 1
       );
+
+      console.log(ranking)
 
       const callData = encodeFunctionData({
         abi,
@@ -97,82 +115,94 @@ const DraggableProfileCards = ({
         args: [BigInt(communityId), BigInt(weekNumber), BigInt(groupId), ranking]
       });
 
-      const userOpHash = await kernelClient.sendUserOperation({
-        userOperation: {
-          callData: await kernelClient.account.encodeCallData({
-            to: rankingContractAddress,
-            value: BigInt(0),
-            data: callData,
-          }),
-        },
-      });
-
-      const bundlerClient = kernelClient.extend(bundlerActions(ENTRYPOINT_ADDRESS_V07));
-      const receipt = await bundlerClient.waitForUserOperationReceipt({
-        hash: userOpHash,
+      const txHash = await sendTransaction({
+        to: rankingContractAddress,
+        value: BigInt(0),
+        data: callData
       });
       
-      console.log('Ranking submitted successfully!', receipt);
+      setSuccess(`Ranking submitted successfully! Transaction hash: ${txHash}`);
+      customSwal("Ranking submitted successfully!");
+      console.log(`Transaction sent. Hash: ${txHash}`);
     } catch (err) {
+      customSwal("Error submitting ranking: " + err.message);
       console.error('Error submitting ranking:', err);
-      setError(`Error submitting ranking: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  if (!ready) {
+    return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <CircularProgress />
+    </Box>;
+  }
+
   return (
-    <Box sx={{ width: '100%', maxWidth: '300px', margin: '0 auto' }}>
-      <DragDropContext onDragEnd={onDragEnd}>
-        <Droppable droppableId="profileList">
-          {(provided, snapshot) => (
-            <div
-              {...provided.droppableProps}
-              ref={provided.innerRef}
-              style={getListStyle(snapshot.isDraggingOver)}
-            >
-              {profiles.map((profile, index) => (
-                <Draggable key={profile.id} draggableId={profile.id} index={index}>
-                  {(provided, snapshot) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.draggableProps}
-                      {...provided.dragHandleProps}
-                      style={getItemStyle(
-                        snapshot.isDragging,
-                        provided.draggableProps.style
+    <Box sx={{ width: '100%', margin: '0 auto' }}>
+      {!authenticated ? (
+        <Button fullWidth onClick={login} sx={{ mb: 2 }}>
+          Login to Submit Ranking
+        </Button>
+      ) : (
+        <>
+          <DragDropContext onDragEnd={onDragEnd}>
+            <Droppable droppableId="profileList">
+              {(provided, snapshot) => (
+                <div
+                  {...provided.droppableProps}
+                  ref={provided.innerRef}
+                  style={getListStyle(snapshot.isDraggingOver)}
+                >
+                  {profiles.map((profile, index) => (
+                    <Draggable key={profile.id} draggableId={profile.id} index={index}>
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          style={getItemStyle(
+                            snapshot.isDragging,
+                            provided.draggableProps.style
+                          )}
+                        >
+                          <Avatar
+                            src={profile.avatar}
+                            alt={profile.name}
+                            sx={{ width: 40, height: 40, mr: 2, flexShrink: 0 }}
+                          />
+                          <Typography level="body1" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {profile.name}
+                          </Typography>
+                        </div>
                       )}
-                    >
-                      <Avatar
-                        src={profile.avatar}
-                        alt={profile.name}
-                        sx={{ width: 40, height: 40, mr: 2, flexShrink: 0 }}
-                      />
-                      <Typography level="body1" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {profile.name}
-                      </Typography>
-                    </div>
-                  )}
-                </Draggable>
-              ))}
-              {provided.placeholder}
-            </div>
-          )}
-        </Droppable>
-      </DragDropContext>
-      <Button 
-        variant="solid" 
-        fullWidth 
-        onClick={handleSubmitRanking}
-        disabled={isSubmitting}
-        sx={{ mt: 2 }}
-      >
-        {isSubmitting ? <CircularProgress size="sm" /> : 'Submit Ranking'}
-      </Button>
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </DragDropContext>
+          <Button 
+            variant="solid" 
+            fullWidth 
+            onClick={handleSubmitRanking}
+            disabled={isSubmitting || !ready}
+            sx={{ mt: 2 }}
+          >
+            {isSubmitting ? <CircularProgress size="sm" /> : 'Submit Ranking'}
+          </Button>
+        </>
+      )}
       {error && (
-        <Typography color="danger" sx={{ mt: 2 }}>
+        <Alert color="danger" sx={{ mt: 2 }}>
           {error}
-        </Typography>
+        </Alert>
+      )}
+      {success && (
+        <Alert color="success" sx={{ mt: 2 }}>
+          {success}
+        </Alert>
       )}
     </Box>
   );
