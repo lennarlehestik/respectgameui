@@ -1,6 +1,7 @@
 /* global BigInt */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { base } from 'viem/chains';
 import { encodeFunctionData, parseAbi } from 'viem';
 import { 
@@ -18,10 +19,11 @@ import {
 import { useAuth } from './AuthProvider';
 import ImageUpload from './ImageUpload';
 import Drawer from './Drawer';
-import customSwal from './customSwal';
+import { customSwal, customCenteredSwal } from './customSwal';
 import Confetti from './Confetti';
 
 function MakeDao() {
+  const navigate = useNavigate();
   const { authenticated, ready, login, logout, sendTransaction, getSmartWalletAddress } = useAuth();
   const [communityName, setCommunityName] = useState('');
   const [communityDescription, setCommunityDescription] = useState('');
@@ -43,7 +45,6 @@ function MakeDao() {
     }
   };
 
-
   const contractAddress = '0x589302b32b60434470C47898905eBe1ADA67E151';
   const abi = parseAbi([
     "function createCommunity(string _name, string _description, string _imageUrl, string _tokenName, string _tokenSymbol) public returns (uint256)"
@@ -61,6 +62,39 @@ function MakeDao() {
     setImageUrl(url);
     console.log(`Image uploaded successfully: ${url}`);
     customSwal("Image uploaded successfully.");
+  };
+
+  const fetchCommunities = async () => {
+    try {
+      const response = await fetch('https://respectgameapi-d34365572ae7.herokuapp.com/api/communities');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      return data.data.communities;
+    } catch (error) {
+      console.error('Error fetching communities:', error);
+      return null;
+    }
+  };
+
+  const findCommunityByName = async (name) => {
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    while (attempts < maxAttempts) {
+      const communities = await fetchCommunities();
+      if (communities) {
+        const community = communities.find(c => c.name === name);
+        if (community) {
+          return community;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      attempts++;
+    }
+
+    return null;
   };
 
   const handleCreateCommunity = async () => {
@@ -83,7 +117,7 @@ function MakeDao() {
       const callData = encodeFunctionData({
         abi,
         functionName: 'createCommunity',
-        args: [communityName, communityDescription, imageUrl, tokenName, tokenSymbol]
+        args: [communityName, communityDescription, imageUrl, "Respect", "RESPECT"]
       });
 
       const txHash = await sendTransaction({
@@ -91,8 +125,18 @@ function MakeDao() {
         value: BigInt(0),
         data: callData
       });
-      customSwal("Community created! Transaction hash: " + txHash);
-      console.log(`Transaction sent. Hash: ${txHash}`);
+
+      shootConfetti();
+      customCenteredSwal("Congratulations, you've created a community! You'll be directed to it in a few seconds.");
+
+      const community = await findCommunityByName(communityName);
+      if (community) {
+        setTimeout(() => {
+          navigate(`/respectgame/${community.id}`);
+        }, 5000);
+      } else {
+        customSwal("Community created, but couldn't find it in the API. Please check your communities list.");
+      }
 
       // Reset form fields
       setCommunityName('');
@@ -157,7 +201,6 @@ function MakeDao() {
           }}
         >
           <Typography level="h3" sx={{ mb: 1 }}>Create a Respect Game Community</Typography>
-          {/*<button onClick={shootConfetti}>Shoot confetti</button>*/}
           {!authenticated ? (
             <Button fullWidth onClick={login} sx={{ mb: 1 }}>
               Login to Create Community
@@ -174,7 +217,7 @@ function MakeDao() {
               </FormControl>
 
               <FormControl>
-                <FormLabel>Community description</FormLabel>
+                <FormLabel>Describe your community's mission</FormLabel>
                 <Textarea 
                   value={communityDescription}
                   onChange={(e) => setCommunityDescription(e.target.value)}
@@ -187,24 +230,6 @@ function MakeDao() {
               <FormControl>
                 <FormLabel>Community image</FormLabel>
                 <ImageUpload onImageUploaded={handleImageUploaded} />
-              </FormControl>
-
-              <FormControl>
-                <FormLabel>Token name</FormLabel>
-                <Input 
-                  value={tokenName}
-                  onChange={(e) => setTokenName(e.target.value)}
-                  sx={{ mb: 1 }} 
-                />
-              </FormControl>
-
-              <FormControl>
-                <FormLabel>Token symbol</FormLabel>
-                <Input 
-                  value={tokenSymbol}
-                  onChange={(e) => setTokenSymbol(e.target.value)}
-                  sx={{ mb: 1 }} 
-                />
               </FormControl>
 
               <Button 

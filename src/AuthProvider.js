@@ -8,36 +8,19 @@ const log = (message, data = null) => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const privyValues = usePrivySmartAccount();
-  const { 
-    ready, 
-    authenticated, 
-    login, 
-    logout, 
+  const privySmartAccount = usePrivySmartAccount();
+  const {
+    ready,
+    authenticated,
+    login,
+    logout,
     sendTransaction,
     user
-  } = privyValues;
+  } = privySmartAccount;
 
   const [smartWalletAddress, setSmartWalletAddress] = useState(null);
 
   useEffect(() => {
-    log('Privy values changed', privyValues);
-  }, [privyValues]);
-
-  useEffect(() => {
-    log('AuthProvider mounted');
-    return () => log('AuthProvider unmounted');
-  }, []);
-
-  useEffect(() => {
-    log('Auth state changed', {
-      ready,
-      authenticated,
-      userAddress: user?.wallet?.address
-    });
-    console.log("USER:")
-    console.log(user)
-
     if (authenticated && user?.wallet?.address) {
       setSmartWalletAddress(user.wallet.address);
     } else {
@@ -45,9 +28,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, [authenticated, user?.wallet?.address]);
 
-  const getSmartWalletAddress = useCallback(() => {
-    return smartWalletAddress;
-  }, [smartWalletAddress]);
+  const getSmartWalletAddress = useCallback(() => smartWalletAddress, [smartWalletAddress]);
 
   const checkSmartWalletStatus = useCallback(() => {
     log('Checking smart wallet status', {
@@ -68,7 +49,23 @@ export const AuthProvider = ({ children }) => {
     smartWalletAddress
   }), [ready, authenticated, login, logout, sendTransaction, getSmartWalletAddress, checkSmartWalletStatus, user, smartWalletAddress]);
 
+  // Log only when important values change
+  useEffect(() => {
+    log('Auth state changed', {
+      ready,
+      authenticated,
+      userAddress: user?.wallet?.address,
+      smartWalletAddress
+    });
+  }, [ready, authenticated, user?.wallet?.address, smartWalletAddress]);
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};

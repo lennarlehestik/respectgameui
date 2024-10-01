@@ -21,4 +21,27 @@ const customSwal = (text) => {
   });
 };
 
-export default customSwal;
+const customCenteredSwal = (text) => {
+  return MySwal.fire({
+    text: text,
+    position: 'center',
+    showConfirmButton: true,
+    background: '#fff',
+    color: 'black'
+  });
+};
+
+const customModalSwal = (title, text, confirmButtonText, onConfirm) => {
+  return MySwal.fire({
+    title: title,
+    text: text,
+    confirmButtonColor: '#3085d6',
+    confirmButtonText: confirmButtonText,
+  }).then((result) => {
+    if (result.isConfirmed && onConfirm) {
+      onConfirm();
+    }
+  });
+};
+
+export { customSwal, customCenteredSwal, customModalSwal };

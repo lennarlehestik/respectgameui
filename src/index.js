@@ -19,6 +19,7 @@ root.render(
     <ZeroDevProvider projectId={ZERODEV_PROJECT_ID}>
       <PrivyProvider
         appId={PRIVY_APP_ID}
+        onSuccess={() => console.log('Success!')}
         config={{
           loginMethods: ['email'],
           appearance: {

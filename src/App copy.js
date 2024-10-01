@@ -11,9 +11,7 @@ import Profile from './Profile';
 import Drawer from './Drawer';
 import { useMediaQuery } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { customToastSwal, customCenteredSwal } from './customSwal';
-import MemberApproval from './MemberApproval';
-import Proposals from './Proposals';
+import customSwal from './customSwal';
 
 const CommunityCard = React.memo(({ community }) => {
   const theme = useTheme();
@@ -77,6 +75,10 @@ function App() {
     return () => console.log('App unmounted');
   }, [fetchCommunities]);
 
+  useEffect(() => {
+    console.log('Auth state changed', { ready, authenticated, smartWalletAddress });
+  }, [ready, authenticated, smartWalletAddress]);
+
   const Landing = React.memo(() => (
     <Box className="App">
       <Drawer />
@@ -114,8 +116,6 @@ function App() {
         <Route path="/draggableprofilecards" element={<DraggableProfileCards />} />
         <Route path="/invite/:id" element={<Invite />} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/memberapproval" element={<MemberApproval />} />
-        <Route path="/proposals" element={<Proposals />} />
       </Routes>
     </Router>
   );

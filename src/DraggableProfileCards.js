@@ -5,7 +5,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Typography, Avatar, Box, Button, CircularProgress, Alert } from '@mui/joy';
 import { encodeFunctionData, parseAbi } from 'viem';
 import { useAuth } from './AuthProvider';
-import customSwal from './customSwal';
+import { customSwal, customCenteredSwal } from './customSwal';
 
 const grid = 8;
 

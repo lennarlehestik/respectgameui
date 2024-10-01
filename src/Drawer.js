@@ -20,6 +20,8 @@ import AddIcon from '@mui/icons-material/Add';
 import LoginIcon from '@mui/icons-material/Login';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { Link, useNavigate } from 'react-router-dom';
+import LibraryAddCheckIcon from '@mui/icons-material/LibraryAddCheck';
+import ArticleIcon from '@mui/icons-material/Article';
 
 export default function InsetDrawer({bg}) {
   const [open, setOpen] = React.useState(false);
@@ -144,6 +146,18 @@ export default function InsetDrawer({bg}) {
                     <ListItemButton component={Link} to="/">
                       <HomeIcon sx={{ mr: 2 }} />
                       Home
+                    </ListItemButton>
+                  </ListItem>
+                  <ListItem>
+                    <ListItemButton component={Link} to="/memberapproval">
+                      <LibraryAddCheckIcon sx={{ mr: 2 }} />
+                      Approve members
+                    </ListItemButton>
+                  </ListItem>
+                  <ListItem>
+                    <ListItemButton component={Link} to="/proposals">
+                      <ArticleIcon sx={{ mr: 2 }} />
+                      Proposals
                     </ListItemButton>
                   </ListItem>
                 </List>

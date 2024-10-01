@@ -1,7 +1,7 @@
 /* global BigInt */
 
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { encodeFunctionData, parseAbi } from 'viem';
 import { 
   Box, 
@@ -18,10 +18,12 @@ import {
 import { useAuth } from './AuthProvider';
 import ImageUpload from './ImageUpload';
 import Drawer from './Drawer';
-import customSwal from './customSwal';
+import { customSwal, customCenteredSwal, customModalSwal } from './customSwal';
+import Confetti from './Confetti';
 
 function Invite() {
   const { id: communityId } = useParams();
+  const navigate = useNavigate();
   const { authenticated, login, logout, sendTransaction, getSmartWalletAddress, ready } = useAuth();
   const [username, setUsername] = useState('');
   const [description, setDescription] = useState('');
@@ -30,6 +32,7 @@ function Invite() {
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [smartAccountAddress, setSmartAccountAddress] = useState(null);
+  const confettiRef = useRef(null);
 
   useEffect(() => {
     const fetchSmartWalletAddress = async () => {
@@ -51,6 +54,14 @@ function Invite() {
     setProfilePicUrl(url);
     console.log(`Profile picture uploaded successfully: ${url}`);
     customSwal("Profile picture uploaded successfully.");
+  };
+
+  const shootConfetti = () => {
+    if (confettiRef.current) {
+      confettiRef.current.triggerConfetti();
+    } else {
+      console.error('Confetti ref is not available');
+    }
   };
 
   const handleJoinCommunity = async () => {
@@ -84,8 +95,16 @@ function Invite() {
       });
       
       setSuccess(`Joined community successfully! Transaction hash: ${txHash}`);
-      customSwal("Joined community successfully!");
       console.log(`Transaction sent. Hash: ${txHash}`);
+
+      shootConfetti();
+
+      customModalSwal(
+        'Congratulations!',
+        "You've joined the community. To participate in games, existing members may have to approve your application.",
+        'Go to community page',
+        () => navigate(`/respectgame/${communityId}`)
+      );
 
       // Reset form fields
       setUsername('');
@@ -117,6 +136,7 @@ function Invite() {
         overflow: 'hidden'
       }}
     >
+      <Confetti ref={confettiRef} duration={3000} />
       <Drawer bg={"none"}/>
       <Box 
         className="makedaoleft" 
@@ -162,7 +182,6 @@ function Invite() {
             </Button>
           ) : (
             <>
-
               <FormControl>
                 <FormLabel>What should we call you?</FormLabel>
                 <Input 

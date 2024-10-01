@@ -41,7 +41,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 
 import { useAuth } from './AuthProvider';
-import customSwal from './customSwal';
+import { customSwal, customCenteredSwal } from './customSwal';
 
 
 const ElectionRoom = ({ roomNumber, participants, contributions, rankings, profiles }) => {
@@ -60,7 +60,6 @@ const ElectionRoom = ({ roomNumber, participants, contributions, rankings, profi
   return (
     <Accordion expanded={expanded} onChange={() => setExpanded(!expanded)}>
       <AccordionSummary
-        indicator={expanded ? '▲' : '▼'}
         aria-controls={`room${roomNumber}-content`}
         id={`room${roomNumber}-header`}
         sx={{
@@ -142,7 +141,6 @@ const CurrentGameContributions = ({ group, contributions, profiles }) => {
   return (
     <Accordion expanded={expanded} onChange={() => setExpanded(!expanded)}>
       <AccordionSummary
-        indicator={expanded ? '▲' : '▼'}
         aria-controls="current-game-content"
         id="current-game-header"
         sx={{
@@ -252,7 +250,7 @@ const UserProfileModal = ({ open, onClose, userAddress, profiles, communityData 
 
   const handleShare = () => {
     const currentUrl = window.location.href;
-    const baseUrl = currentUrl.split('?')[0]; // Remove any existing query parameters
+    const baseUrl = currentUrl?.split('?')[0]; // Remove any existing query parameters
     const shareUrl = `${baseUrl}?user=${userAddress}`;
 
     navigator.clipboard.writeText(shareUrl).then(() => {
@@ -280,7 +278,7 @@ const UserProfileModal = ({ open, onClose, userAddress, profiles, communityData 
     <Modal open={open} onClose={onClose}>
       <ModalDialog sx={{ maxWidth: 600, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography level="h4">User Profile</Typography>
+          <Typography level="h4">{userProfile?.username} profile</Typography>
           <Tooltip title={copySuccess ? "Copied!" : "Copy share link"} placement="top">
             <Button
               variant="outlined"
@@ -296,40 +294,52 @@ const UserProfileModal = ({ open, onClose, userAddress, profiles, communityData 
           <Avatar src={userProfile.profilepic || "./placeholderimage.jpg"} alt={userProfile.username} />
           <Box sx={{ ml: 2 }}>
             <Typography level="h5">{userProfile.username}</Typography>
-            <Typography level="body2">{userProfile.user}</Typography>
+            <Typography level="body-sm">{userProfile.user}</Typography>
           </Box>
         </Box>
+        <Typography level="body1">{userProfile.description}</Typography>
         <Divider sx={{ my: 2 }} />
-        <Typography level="body1">Description: {userProfile.description}</Typography>
-        <Typography level="body2">Created At: {new Date(parseInt(userProfile.createdAt) * 1000).toLocaleString()}</Typography>
-        <Typography level="body2">Updated At: {new Date(parseInt(userProfile.updatedAt) * 1000).toLocaleString()}</Typography>
-        
-        <Typography level="h5" sx={{ mt: 3, mb: 2 }}>User History</Typography>
+
         {userHistory.length > 0 ? (
           userHistory.map((game, index) => (
             <Accordion key={index}>
               <AccordionSummary>Game #{game.gameNumber}</AccordionSummary>
               <AccordionDetails>
-                <Typography level="h6">Contributions:</Typography>
+                <br/>
                 {game.contributions.map((contribution, cIndex) => (
-                  <Box key={cIndex} sx={{ mb: 2 }}>
-                    <Typography level="body2" fontWeight="bold">{contribution.name}</Typography>
+                  <Box key={cIndex} sx={{ mb: 3, borderLeft:"3px solid #bc92fc", paddingLeft:"10px"}}>
+                    <Typography level="body2" sx={{ fontWeight: 'bold' }}>{contribution.name}</Typography>
                     <Typography level="body2">{contribution.description}</Typography>
                     <Typography level="body2">
-                      Links: {contribution.links.map((link, lIndex) => (
-                        <Chip key={lIndex} sx={{ mr: 1 }} size="sm" component="a" href={link} target="_blank">
-                          Link {lIndex + 1}
-                        </Chip>
-                      ))}
+                      Links: {contribution.links.map((link, lIndex) => {
+                        const absoluteLink = link.startsWith('http://') || link.startsWith('https://')
+                          ? link
+                          : `https://${link}`;
+
+                        return (
+                          <a key={lIndex} href={absoluteLink} target="_blank" rel="noopener noreferrer" sx={{ mr: 1 }}>
+                            <Chip sx={{ mr: 1, cursor: "pointer" }} size="sm">
+                              Link {lIndex + 1}
+                            </Chip>
+                          </a>
+                        );
+                      })}
                     </Typography>
                   </Box>
                 ))}
-                <Typography level="h6">Rankings given:</Typography>
-                {game.ranking.map((rank, rIndex) => (
-                  <Chip key={rIndex} sx={{ mr: 1 }} size="sm">
-                    Rank {rIndex + 1}: {rank}
-                  </Chip>
-                ))}
+                <Typography level="body-sm"><b>Rankings given:</b></Typography>
+                <Box>
+                  {game.ranking.map((rank, rIndex) => {
+                    const rankedUser = communityData.profiles.find(
+                      profile => profile.user.toLowerCase() === game.contributions[rIndex]?.contributionId?.split('-')[0].toLowerCase()
+                    );
+                    return (
+                      <Chip key={rIndex} sx={{ mr: 1, mb: 1 }} size="sm">
+                        {rankedUser ? rankedUser.username : `User ${rIndex + 1}`}: {rank}
+                      </Chip>
+                    );
+                  })}
+                </Box>
               </AccordionDetails>
             </Accordion>
           ))
@@ -447,6 +457,24 @@ function GamePage() {
     fetchCommunityData();
   }, [id]);
 
+    // New useEffect to set contributions when smartAccountAddress is available
+    useEffect(() => {
+      if (communityData && smartAccountAddress) {
+        const currentGame = communityData?.community?.weeklyGames[communityData.community.weeklyGames.length - 1];
+        const userContributions = currentGame?.contributions?.find(c => 
+          c.contributionId.toLowerCase().includes(smartAccountAddress.toLowerCase())
+        );
+  
+        if (userContributions) {
+          setContributions(userContributions.contributions.map(contribution => ({
+            name: contribution.name,
+            description: contribution.description,
+            links: contribution.links
+          })));
+        }
+      }
+    }, [smartAccountAddress, communityData]);
+
   const handleAddContribution = () => {
     setContributions([...contributions, { name: '', description: '', links: [''] }]);
   };
@@ -535,7 +563,6 @@ function GamePage() {
       
       console.log(`Contributions submitted successfully! Transaction hash: ${txHash}`);
       customSwal(`Contributions submitted successfully! Transaction hash: ${txHash}`);
-      setContributions([{ name: '', description: '', links: [''] }]);
     } catch (err) {
       console.error('Error submitting contributions:', err);
       customSwal(`Error submitting contributions: ${err.message}`);
