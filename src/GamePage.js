@@ -62,6 +62,48 @@ const ElectionRoom = ({ roomNumber, participants, contributions, rankings, profi
     return ranking ? ranking.ranking : [];
   };
 
+  const renderUserRanking = (participant) => {
+    const userRanking = getUserRanking(participant);
+    if (userRanking.length === 0) {
+      return (
+        <Typography level="body2" sx={{ fontStyle: 'italic' }}>
+          Member didn't submit rankings
+        </Typography>
+      );
+    }
+
+    // Sort participants based on their ranking
+    const sortedParticipants = [...participants].sort((a, b) => {
+      const rankA = userRanking[participants.indexOf(a)] || 0;
+      const rankB = userRanking[participants.indexOf(b)] || 0;
+      return rankB - rankA; // Higher number means better rank
+    });
+
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {sortedParticipants.map((rankedParticipant, index) => {
+          const rank = userRanking[participants.indexOf(rankedParticipant)];
+          return (
+            <Box key={index} sx={{ display: 'flex', alignItems: 'center' }}>
+              <EmojiEventsIcon 
+                sx={{ 
+                  mr: 1, 
+                  color: index === 0 ? 'gold' : 
+                        index === 1 ? 'silver' :
+                        index === 2 ? '#CD7F32' : // bronze
+                        '#808080' // iron (gray)
+                }} 
+              />
+              <Chip sx={{ mr: 1 }} size="sm">
+                {`${index + 1}. ${getUsername(rankedParticipant)}`}
+              </Chip>
+            </Box>
+          );
+        })}
+      </Box>
+    );
+  };
+
   return (
     <Accordion expanded={expanded} onChange={() => setExpanded(!expanded)}>
       <AccordionSummary
@@ -90,32 +132,32 @@ const ElectionRoom = ({ roomNumber, participants, contributions, rankings, profi
         </Box>
       </AccordionSummary>
       <AccordionDetails>
-      {consensus && (
-        <Box sx={{ mb: 3, p: 2, bgcolor: 'background.level1', borderRadius: 'sm' }}>
-          <Typography level="h6" sx={{ mb: 2 }}><b>Consensus Ranking</b></Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {consensus.finalRanking.map((rank, index) => (
-              <Box key={index} sx={{ display: 'flex', alignItems: 'center' }}>
-                <EmojiEventsIcon 
-                  sx={{ 
-                    mr: 1, 
-                    color: index === 0 ? 'gold' : 
-                          index === 1 ? 'silver' :
-                          index === 2 ? '#CD7F32' : // bronze
-                          '#808080' // iron (gray)
-                  }} 
-                />
-                <Chip
-                  size="lg"
-                  sx={{ fontSize: '1rem' }}
-                >
-                  {`${index + 1}. ${getUsername(participants[parseInt(rank) - 1])}`}
-                </Chip>
-              </Box>
-            ))}
+        {consensus && (
+          <Box sx={{ mb: 3, p: 2, bgcolor: 'background.level1', borderRadius: 'sm' }}>
+            <Typography level="h6" sx={{ mb: 2 }}><b>Consensus Ranking</b></Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {consensus.finalRanking.map((rank, index) => (
+                <Box key={index} sx={{ display: 'flex', alignItems: 'center' }}>
+                  <EmojiEventsIcon 
+                    sx={{ 
+                      mr: 1, 
+                      color: index === 0 ? 'gold' : 
+                            index === 1 ? 'silver' :
+                            index === 2 ? '#CD7F32' : // bronze
+                            '#808080' // iron (gray)
+                    }} 
+                  />
+                  <Chip
+                    size="lg"
+                    sx={{ fontSize: '1rem' }}
+                  >
+                    {`${index + 1}. ${getUsername(participants[parseInt(rank) - 1])}`}
+                  </Chip>
+                </Box>
+              ))}
+            </Box>
           </Box>
-        </Box>
-      )}
+        )}
         {participants?.map((participant, index) => (
           <Box key={index} sx={{ mb: 2 }}>
             <Box 
@@ -133,53 +175,32 @@ const ElectionRoom = ({ roomNumber, participants, contributions, rankings, profi
               </Typography>
             </Box>
             <Box sx={{ ml: 4, mb: 2 }}>
-  <Typography level="body2" sx={{ fontWeight: 'bold' }}>Rankings given:</Typography>
-  {getUserRanking(participant).length > 0 ? (
-    getUserRanking(participant).map((rank, index) => (
-      <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-        <EmojiEventsIcon 
-          sx={{ 
-            mr: 1, 
-            color: index === 0 ? 'gold' : 
-                  index === 1 ? 'silver' :
-                  index === 2 ? '#CD7F32' : // bronze
-                  '#808080' // iron (gray)
-          }} 
-        />
-        <Chip sx={{ mr: 1 }} size="sm">
-          {`${index + 1}. ${getUsername(participants[parseInt(rank) - 1])}`}
-        </Chip>
-      </Box>
-    ))
-  ) : (
-    <Typography level="body2" sx={{ fontStyle: 'italic' }}>
-      Member didn't submit rankings
-    </Typography>
-  )}
-</Box>
+              <Typography level="body2" sx={{ fontWeight: 'bold' }}>Rankings given:</Typography>
+              {renderUserRanking(participant)}
+            </Box>
             <Box sx={{ ml: 4, mt: 1}}>
-            <Typography level="body2" sx={{ fontWeight: 'bold' }}>Contributions:</Typography>
-            {contributions.find(c => c.contributionId.toLowerCase().includes(participant.toLowerCase()))?.contributions.map((contribution, cIndex) => (
-              <Box key={cIndex} sx={{ mt: 1,  borderLeft:"3px solid #bc92fc", paddingLeft:"5px"}}>
-                <Typography level="body2" sx={{ fontWeight: 'bold' }}>{contribution.name}</Typography>
-                <Typography level="body2">{contribution.description}</Typography>
-                <Typography level="body2">
-                  Links: {contribution.links.map((link, lIndex) => {
-                    const absoluteLink = link.startsWith('http://') || link.startsWith('https://')
-                      ? link
-                      : `https://${link}`;
+              <Typography level="body2" sx={{ fontWeight: 'bold' }}>Contributions:</Typography>
+              {contributions.find(c => c.contributionId.toLowerCase().includes(participant.toLowerCase()))?.contributions.map((contribution, cIndex) => (
+                <Box key={cIndex} sx={{ mt: 1,  borderLeft:"3px solid #bc92fc", paddingLeft:"5px"}}>
+                  <Typography level="body2" sx={{ fontWeight: 'bold' }}>{contribution.name}</Typography>
+                  <Typography level="body2">{contribution.description}</Typography>
+                  <Typography level="body2">
+                    Links: {contribution.links.map((link, lIndex) => {
+                      const absoluteLink = link.startsWith('http://') || link.startsWith('https://')
+                        ? link
+                        : `https://${link}`;
 
-                    return (
-                      <a key={lIndex} href={absoluteLink} target="_blank" rel="noopener noreferrer" sx={{ mr: 1 }}>
-                        <Chip sx={{ mr: 1, cursor: "pointer" }} size="sm">
-                          Link {lIndex + 1}
-                        </Chip>
-                      </a>
-                    );
-                  })}
-                </Typography>
-              </Box>
-            ))}
+                      return (
+                        <a key={lIndex} href={absoluteLink} target="_blank" rel="noopener noreferrer" sx={{ mr: 1 }}>
+                          <Chip sx={{ mr: 1, cursor: "pointer" }} size="sm">
+                            Link {lIndex + 1}
+                          </Chip>
+                        </a>
+                      );
+                    })}
+                  </Typography>
+                </Box>
+              ))}
             </Box>
           </Box>
         ))}
@@ -320,7 +341,8 @@ const UserProfileModal = ({ open, onClose, userAddress, profiles, communityData 
       return {
         gameNumber: Number(game.weekNumber) + 1,
         contributions: userContribution ? userContribution.contributions : [],
-        ranking: userRanking ? userRanking.ranking : []
+        ranking: userRanking ? userRanking.ranking : [],
+        roomMembers: game.rooms[0]?.memberAddresses || [] // Assuming user is always in the first room
       };
     }).filter(game => game.contributions.length > 0 || game.ranking.length > 0);
   };
@@ -336,6 +358,51 @@ const UserProfileModal = ({ open, onClose, userAddress, profiles, communityData 
     }, (err) => {
       console.error('Could not copy text: ', err);
     });
+  };
+
+  const renderUserRanking = (ranking, memberAddresses) => {
+    if (ranking.length === 0) {
+      return (
+        <Typography level="body3" sx={{ fontStyle: 'italic'}}>
+          User did not submit rankings
+        </Typography>
+      );
+    }
+
+    // Sort memberAddresses based on their ranking
+    const sortedMembers = [...memberAddresses].sort((a, b) => {
+      const rankA = ranking[memberAddresses.indexOf(a)] || 0;
+      const rankB = ranking[memberAddresses.indexOf(b)] || 0;
+      return rankB - rankA; // Higher number means better rank
+    });
+
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {sortedMembers.map((member, index) => {
+          const rank = ranking[memberAddresses.indexOf(member)];
+          const profile = profiles.find(p => p.user.toLowerCase() === member.toLowerCase());
+          return (
+            <Box key={index} sx={{ display: 'flex', alignItems: 'center' }}>
+              <EmojiEventsIcon 
+                sx={{ 
+                  mr: 1, 
+                  color: index === 0 ? 'gold' : 
+                        index === 1 ? 'silver' :
+                        index === 2 ? '#CD7F32' : // bronze
+                        '#808080' // iron (gray)
+                }} 
+              />
+              <Chip
+                size="sm"
+                sx={{ mr: 1 }}
+              >
+                {`${index + 1}. ${profile ? profile.username : 'Unknown'}`}
+              </Chip>
+            </Box>
+          );
+        })}
+      </Box>
+    );
   };
 
   if (!userProfile) {
@@ -405,37 +472,7 @@ const UserProfileModal = ({ open, onClose, userAddress, profiles, communityData 
                   </Box>
                 ))}
                 <Typography level="body-sm" sx={{ fontWeight: 'bold', mb: 1 }}>Rankings given:</Typography>
-                {game.ranking.length > 0 ? (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    {game.ranking.map((rank, rIndex) => {
-                      const rankedUser = communityData.community.weeklyGames[game.gameNumber - 1]?.rooms[0]?.memberAddresses[parseInt(rank) - 1];
-                      const profile = communityData.profiles.find(p => p.user.toLowerCase() === rankedUser?.toLowerCase());
-                      return (
-                        <Box key={rIndex} sx={{ display: 'flex', alignItems: 'center' }}>
-                          <EmojiEventsIcon 
-                            sx={{ 
-                              mr: 1, 
-                              color: rIndex === 0 ? 'gold' : 
-                                    rIndex === 1 ? 'silver' :
-                                    rIndex === 2 ? '#CD7F32' : // bronze
-                                    '#808080' // iron (gray)
-                            }} 
-                          />
-                          <Chip
-                            size="sm"
-                            sx={{ mr: 1 }}
-                          >
-                            {`${rIndex + 1}. ${profile ? profile.username : 'Unknown'}`}
-                          </Chip>
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                ) : (
-                  <Typography level="body3" sx={{ fontStyle: 'italic'}}>
-                    User did not submit rankings
-                  </Typography>
-                )}
+                {renderUserRanking(game.ranking, game.roomMembers)}
               </AccordionDetails>
             </Accordion>
           ))
@@ -1125,19 +1162,32 @@ function GamePage() {
                       {userSubmittedRanking && (
                         <Box sx={{ mt: 2, p: 2, bgcolor: 'background.level1', borderRadius: 'sm' }}>
                           <Typography level="body1" fontWeight="bold">You have submitted rankings:</Typography>
-                          <ol>
-                            {userSubmittedRanking.map((rankIndex, index) => {
-                              const address = userGroup.memberAddresses[parseInt(rankIndex) - 1];
-                              const profile = profiles.find(p => p.user.toLowerCase() === address.toLowerCase());
-                              return (
-                                <li key={index}>
-                                  <Typography level="body2">
-                                    {profile ? profile.username : 'Unknown'}
-                                  </Typography>
-                                </li>
-                              );
-                            })}
-                          </ol>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
+                            {userGroup.memberAddresses
+                              .map((address, index) => ({
+                                address,
+                                score: userSubmittedRanking[index],
+                                profile: profiles.find(p => p.user.toLowerCase() === address.toLowerCase())
+                              }))
+                              .sort((a, b) => b.score - a.score) // Sort by score in descending order
+                              .map((member, index) => (
+                                <Box key={index} sx={{ display: 'flex', alignItems: 'center' }}>
+                                  <EmojiEventsIcon 
+                                    sx={{ 
+                                      mr: 1, 
+                                      color: index === 0 ? 'gold' : 
+                                            index === 1 ? 'silver' :
+                                            index === 2 ? '#CD7F32' : // bronze
+                                            '#808080' // iron (gray)
+                                    }} 
+                                  />
+                                  <Chip size="sm" sx={{ mr: 1 }}>
+                                    {`${index + 1}. ${member.profile ? member.profile.username : 'Unknown'}`}
+                                  </Chip>
+                                </Box>
+                              ))
+                            }
+                          </Box>
                         </Box>
                       )}
                     </Box>

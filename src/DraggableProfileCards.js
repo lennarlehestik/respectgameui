@@ -82,16 +82,11 @@ const DraggableProfileCards = ({
     ]);
 
     try {
-      // Create a mapping of addresses to their current positions
-      const addressPositions = orderRef.current.reduce((acc, address, index) => {
-        acc[address.toLowerCase()] = index;
-        return acc;
-      }, {});
-
-      // Calculate rankings based on the original order of roomMembers
-      const ranking = orderRef.current.map(address => 
-        roomMembers.findIndex(member => member.address.toLowerCase() === address.toLowerCase()) + 1
-      );
+      // Calculate rankings based on the original order and new order
+      const ranking = roomMembers.map((member, originalIndex) => {
+        const newIndex = orderRef.current.findIndex(address => address === member.address);
+        return roomMembers.length - newIndex; // Highest number for top position, 1 for bottom position
+      });
 
       console.log('Ranking:', ranking);
 
