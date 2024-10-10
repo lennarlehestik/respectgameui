@@ -1,6 +1,5 @@
 /* global BigInt */
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Typography, Avatar, Box, Button, CircularProgress, Alert } from '@mui/joy';
 import { encodeFunctionData, parseAbi } from 'viem';
@@ -34,49 +33,36 @@ const DraggableProfileCards = ({
   communityId, 
   weekNumber, 
   groupId, 
-  roomMembers
+  roomMembers,
+  onRankingSubmitted
 }) => {
-  const { authenticated, login, sendTransaction, getSmartWalletAddress, ready } = useAuth();
-  const [profiles, setProfiles] = useState([]);
+  const { authenticated, sendTransaction, getSmartWalletAddress, ready } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [smartAccountAddress, setSmartAccountAddress] = useState(null);
+
+  const profilesRef = useRef(roomMembers);
+  const orderRef = useRef(roomMembers.map(member => member.address));
+  const [, forceUpdate] = useState({});
 
   useEffect(() => {
-    const fetchSmartWalletAddress = async () => {
-      if (authenticated && ready) {
-        const address = await getSmartWalletAddress();
-        setSmartAccountAddress(address);
-        console.log(`Smart wallet address: ${address}`);
-      }
-    };
-    fetchSmartWalletAddress();
-  }, [authenticated, ready, getSmartWalletAddress]);
-
-  useEffect(() => {
-    if (roomMembers) {
-      const newProfiles = roomMembers.map((member, index) => ({
-        id: `profile-${member.address}`,
-        name: member.username || `Address ${member.address.slice(0, 6)}...`,
-        avatar: member.profilePic || '/placeholderimage.jpg',
-        address: member.address
-      }));
-      setProfiles(newProfiles);
+    if (JSON.stringify(roomMembers) !== JSON.stringify(profilesRef.current)) {
+      profilesRef.current = roomMembers;
+      orderRef.current = roomMembers.map(member => member.address);
+      forceUpdate({});
     }
   }, [roomMembers]);
 
-  const onDragEnd = (result) => {
-    if (!result.destination) {
-      return;
-    }
+  const onDragEnd = useCallback((result) => {
+    if (!result.destination) return;
 
-    const newProfiles = Array.from(profiles);
-    const [reorderedItem] = newProfiles.splice(result.source.index, 1);
-    newProfiles.splice(result.destination.index, 0, reorderedItem);
+    const newOrder = Array.from(orderRef.current);
+    const [reorderedItem] = newOrder.splice(result.source.index, 1);
+    newOrder.splice(result.destination.index, 0, reorderedItem);
 
-    setProfiles(newProfiles);
-  };
+    orderRef.current = newOrder;
+    forceUpdate({});
+  }, []);
 
   const handleSubmitRanking = async () => {
     if (!authenticated || !ready) {
@@ -97,17 +83,17 @@ const DraggableProfileCards = ({
 
     try {
       // Create a mapping of addresses to their current positions
-      const addressPositions = profiles.reduce((acc, profile, index) => {
-        acc[profile.address.toLowerCase()] = index;
+      const addressPositions = orderRef.current.reduce((acc, address, index) => {
+        acc[address.toLowerCase()] = index;
         return acc;
       }, {});
 
       // Calculate rankings based on the original order of roomMembers
-      const ranking = roomMembers.map(member => 
-        addressPositions[member.address.toLowerCase()] + 1
+      const ranking = orderRef.current.map(address => 
+        roomMembers.findIndex(member => member.address.toLowerCase() === address.toLowerCase()) + 1
       );
 
-      console.log(ranking)
+      console.log('Ranking:', ranking);
 
       const callData = encodeFunctionData({
         abi,
@@ -121,9 +107,12 @@ const DraggableProfileCards = ({
         data: callData
       });
       
-      setSuccess(`Ranking submitted successfully! Transaction hash: ${txHash}`);
       customSwal("Ranking submitted successfully!");
       console.log(`Transaction sent. Hash: ${txHash}`);
+
+      if (onRankingSubmitted) {
+        onRankingSubmitted(orderRef.current, ranking);
+      }
     } catch (err) {
       customSwal("Error submitting ranking: " + err.message);
       console.error('Error submitting ranking:', err);
@@ -140,60 +129,73 @@ const DraggableProfileCards = ({
 
   return (
     <Box sx={{ width: '100%', margin: '0 auto' }}>
-      {!authenticated ? (
-        <Button fullWidth onClick={login} sx={{ mb: 2 }}>
-          Login to Submit Ranking
-        </Button>
-      ) : (
-        <>
-          <DragDropContext onDragEnd={onDragEnd}>
-            <Droppable droppableId="profileList">
-              {(provided, snapshot) => (
-                <div
-                  {...provided.droppableProps}
-                  ref={provided.innerRef}
-                  style={getListStyle(snapshot.isDraggingOver)}
-                >
-                  {profiles.map((profile, index) => (
-                    <Draggable key={profile.id} draggableId={profile.id} index={index}>
-                      {(provided, snapshot) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          {...provided.dragHandleProps}
-                          style={getItemStyle(
-                            snapshot.isDragging,
-                            provided.draggableProps.style
-                          )}
-                        >
+      <DragDropContext onDragEnd={onDragEnd}>
+        <Droppable droppableId="profileList">
+          {(provided, snapshot) => (
+            <div
+              {...provided.droppableProps}
+              ref={provided.innerRef}
+              style={getListStyle(snapshot.isDraggingOver)}
+            >
+              {orderRef.current.map((address, index) => {
+                const profile = profilesRef.current.find(p => p.address === address);
+                return (
+                  <Draggable key={address} draggableId={address} index={index}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
+                        style={getItemStyle(
+                          snapshot.isDragging,
+                          provided.draggableProps.style
+                        )}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
                           <Avatar
                             src={profile.avatar}
-                            alt={profile.name}
+                            alt={profile.username}
                             sx={{ width: 40, height: 40, mr: 2, flexShrink: 0 }}
                           />
                           <Typography level="body1" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {profile.name}
+                            {profile.username}
                           </Typography>
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </DragDropContext>
-          <Button 
-            variant="solid" 
-            fullWidth 
-            onClick={handleSubmitRanking}
-            disabled={isSubmitting || !ready}
-            sx={{ mt: 2 }}
-          >
-            {isSubmitting ? <CircularProgress size="sm" /> : 'Submit Ranking'}
-          </Button>
-        </>
-      )}
+                        </Box>
+                        <Typography 
+                          level="body2" 
+                          sx={{ 
+                            minWidth: '24px', 
+                            height: '24px', 
+                            borderRadius: '50%', 
+                            backgroundColor: 'primary.light', 
+                            color: 'primary.contrastText', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          #{index + 1}
+                        </Typography>
+                      </div>
+                    )}
+                  </Draggable>
+                );
+              })}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
+      <Button 
+        variant="solid" 
+        fullWidth 
+        onClick={handleSubmitRanking}
+        disabled={isSubmitting || !authenticated || !ready}
+        sx={{ mt: 2 }}
+      >
+        {isSubmitting ? <CircularProgress size="sm" /> : 'Submit Ranking'}
+      </Button>
       {error && (
         <Alert color="danger" sx={{ mt: 2 }}>
           {error}
@@ -208,4 +210,4 @@ const DraggableProfileCards = ({
   );
 };
 
-export default DraggableProfileCards;
+export default React.memo(DraggableProfileCards);

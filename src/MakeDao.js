@@ -108,6 +108,21 @@ function MakeDao() {
       return;
     }
 
+    if(communityName.length > 24) {
+      customSwal("Community name must be less than 24 characters.");
+      return;
+    }
+
+    if(communityDescription.length > 240) {
+      customSwal("Community mission description must be less than 240 characters.");
+      return;
+    }
+
+    if(communityName.length < 3) {
+      customSwal("Community name must be more than 3 characters.");
+      return;
+   }
+
     setIsSubmitting(true);
     setError('');
     setSuccess('');
