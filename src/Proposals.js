@@ -1,7 +1,7 @@
 /* global BigInt */
 
-import React, { useState, useEffect } from 'react';
-import { useParams, Link} from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, Link } from 'react-router-dom';
 import {
   Box,
   Card,
@@ -37,13 +37,16 @@ const generateProposalId = () => {
 
 function Proposals() {
   const { communityId } = useParams();
-  const { authenticated, sendTransaction, ready } = useAuth();
+  const { authenticated, sendTransaction, ready, getSmartWalletAddress } = useAuth();
   const [loading, setLoading] = useState(false);
   const [proposalType, setProposalType] = useState('');
   const [tokenAmount, setTokenAmount] = useState('');
   const [addressInput, setAddressInput] = useState('');
   const [proposals, setProposals] = useState([]);
   const [fetchingProposals, setFetchingProposals] = useState(true);
+  const [communityData, setCommunityData] = useState(null);
+  const [smartAccountAddress, setSmartAccountAddress] = useState(null);
+  const [isInTopRespectedMembers, setIsInTopRespectedMembers] = useState(false);
 
   const contractAddress = '0x64357a6B498BC91455B5A62126A76afDb882925B';
   const abi = parseAbi([
@@ -51,11 +54,23 @@ function Proposals() {
     "function signProposal(uint256 _communityId, uint256 _proposalId) public"
   ]);
 
-  useEffect(() => {
-    fetchProposals();
+  const fetchSmartAccountAddress = useCallback(async () => {
+    const address = await getSmartWalletAddress();
+    setSmartAccountAddress(address);
+  }, [getSmartWalletAddress]);
+
+  const fetchCommunityData = useCallback(async () => {
+    try {
+      const response = await fetch(`https://respectgameapi-d34365572ae7.herokuapp.com/api/community/${communityId}`);
+      const data = await response.json();
+      setCommunityData(data.data);
+    } catch (error) {
+      console.error('Error fetching community data:', error);
+      customSwal('Failed to fetch community data. Please try again later.');
+    }
   }, [communityId]);
 
-  const fetchProposals = async () => {
+  const fetchProposals = useCallback(async () => {
     setFetchingProposals(true);
     try {
       const response = await fetch(`https://respectgameapi-d34365572ae7.herokuapp.com/api/proposals/${communityId}`);
@@ -70,7 +85,32 @@ function Proposals() {
     } finally {
       setFetchingProposals(false);
     }
-  };
+  }, [communityId]);
+
+  useEffect(() => {
+    fetchProposals();
+    fetchCommunityData();
+    fetchSmartAccountAddress();
+  }, [fetchProposals, fetchCommunityData, fetchSmartAccountAddress]);
+
+  const getTopRespectedMembers = useCallback(() => {
+    if (!communityData) return [];
+    return [...communityData.community.memberAddresses].sort((a, b) => {
+      const respectA = communityData.community.memberRespect.find(member => member.address.toLowerCase() === a.toLowerCase());
+      const respectB = communityData.community.memberRespect.find(member => member.address.toLowerCase() === b.toLowerCase());
+      const avgA = respectA ? parseInt(respectA.averageRespect) : 0;
+      const avgB = respectB ? parseInt(respectB.averageRespect) : 0;
+      return avgB - avgA;
+    }).slice(0, 5);
+  }, [communityData]);
+
+  useEffect(() => {
+    if (smartAccountAddress && communityData) {
+      const topMembers = getTopRespectedMembers();
+      const isInTop = topMembers.some(member => member.toLowerCase() === smartAccountAddress.toLowerCase());
+      setIsInTopRespectedMembers(isInTop);
+    }
+  }, [smartAccountAddress, communityData, getTopRespectedMembers]);
 
   const getTokenAmountPlaceholder = (type) => {
     switch (Number(type)) {
@@ -157,6 +197,11 @@ function Proposals() {
   const handleSignProposal = async (proposalId) => {
     if (!authenticated || !ready) {
       customSwal('Please authenticate to sign a proposal.');
+      return;
+    }
+
+    if (!isInTopRespectedMembers) {
+      customSwal("You can't approve proposals as you are not in the council (top 5 most respected members).");
       return;
     }
 
@@ -274,51 +319,51 @@ function Proposals() {
             <Stack spacing={3}>
               {proposals.map((proposal) => (
                 <Card key={proposal.id} variant="outlined" sx={{ p: 3 }}>
-  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-    <Typography level="h4" fontWeight="bold">
-      {proposalTypes.find(t => t.value === Number(proposal.proposalType))?.label || 'Unknown Type'}
-    </Typography>
-    <Chip
-      variant="soft"
-      color={Number(proposal.approvalCount) >= 3 ? 'success' : 'warning'}
-      startDecorator={Number(proposal.approvalCount) >= 3 ? <CheckCircleIcon /> : <PendingIcon />}
-    >
-      {Number(proposal.approvalCount) >= 3 ? 'Approved' : 'Pending'}
-    </Chip>
-  </Box>
-  
-  <Box sx={{ mb: 1, fontSize:"15px"}}>
-    {renderProposalDetails(proposal)}
-  </Box>
-  
-  <Stack direction="row" spacing={2} sx={{ mb: 0}}>
-    <Chip
-      variant="outlined"
-      color="neutral"
-      startDecorator={<AccessTimeIcon />}
-    >
-      {new Date(Number(proposal.createdAt)).toLocaleString()}
-    </Chip>
-    <Chip
-      variant="outlined"
-      color="primary"
-      startDecorator={<HowToVoteIcon />}
-    >
-      Signatures: {proposal.approvalCount} / 3
-    </Chip>
-  </Stack>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                    <Typography level="h4" fontWeight="bold">
+                      {proposalTypes.find(t => t.value === Number(proposal.proposalType))?.label || 'Unknown Type'}
+                    </Typography>
+                    <Chip
+                      variant="soft"
+                      color={Number(proposal.approvalCount) >= 3 ? 'success' : 'warning'}
+                      startDecorator={Number(proposal.approvalCount) >= 3 ? <CheckCircleIcon /> : <PendingIcon />}
+                    >
+                      {Number(proposal.approvalCount) >= 3 ? 'Approved' : 'Pending'}
+                    </Chip>
+                  </Box>
+                  
+                  <Box sx={{ mb: 1, fontSize:"15px"}}>
+                    {renderProposalDetails(proposal)}
+                  </Box>
+                  
+                  <Stack direction="row" spacing={2} sx={{ mb: 0}}>
+                    <Chip
+                      variant="outlined"
+                      color="neutral"
+                      startDecorator={<AccessTimeIcon />}
+                    >
+                      {new Date(Number(proposal.createdAt)).toLocaleString()}
+                    </Chip>
+                    <Chip
+                      variant="outlined"
+                      color="primary"
+                      startDecorator={<HowToVoteIcon />}
+                    >
+                      Signatures: {proposal.approvalCount} / 3
+                    </Chip>
+                  </Stack>
 
-  <Button
-    variant="solid"
-    color="primary"
-    onClick={() => handleSignProposal(proposal.proposalId)}
-    disabled={loading || Number(proposal.approvalCount) >= 3}
-    fullWidth
-    startDecorator={<HowToVoteIcon />}
-  >
-    {Number(proposal.approvalCount) >= 3 ? 'Fully Signed' : 'Sign Proposal'}
-  </Button>
-</Card>
+                  <Button
+                    variant="solid"
+                    color="primary"
+                    onClick={() => handleSignProposal(proposal.proposalId)}
+                    disabled={loading || Number(proposal.approvalCount) >= 3 || !isInTopRespectedMembers}
+                    fullWidth
+                    startDecorator={<HowToVoteIcon />}
+                  >
+                    {Number(proposal.approvalCount) >= 3 ? 'Fully Signed' : 'Sign Proposal'}
+                  </Button>
+                </Card>
               ))}
               {proposals.length === 0 && (
                 <Typography level="body1" sx={{ textAlign: 'center' }}>
