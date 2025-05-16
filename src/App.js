@@ -15,6 +15,7 @@ import EditProfile from './EditProfile';
 import EditCommunity from './EditCommunity';
 import ScrollAnimation from 'react-animate-on-scroll';
 import "animate.css/animate.compat.css"
+import { PrivyProvider } from '@privy-io/react-auth';
 
 const CommunityCard = React.memo(({ community }) => {
   const theme = useTheme();
@@ -182,7 +183,7 @@ function App() {
             <Box component="img" src="council.png" alt="Placeholder council" sx={{ width: 300, flexShrink: 0 }} />
             <Box>
               <Typography level="h4" sx={{ mb: 1, textAlign: isMobile ? 'center' : 'left' }}>Council is formed</Typography>
-              <Typography level="body2" sx={{ textAlign: isMobile ? 'center' : 'left' }}>Most respected members from last 12 weeks form a council. Council controls the community’s treasury, can steer the community and 
+              <Typography level="body2" sx={{ textAlign: isMobile ? 'center' : 'left' }}>Most respected members from last 12 weeks form a council. Council controls the community's treasury, can steer the community and 
               has other privileges. </Typography>
             </Box>
           </Box>
